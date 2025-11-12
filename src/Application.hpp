@@ -67,18 +67,18 @@ private:
 
 	// global resources
 	std::shared_ptr<Camera> m_camera;
-	std::shared_ptr<Octree> m_octree;
+	// std::shared_ptr<Octree> m_octree;
+	// std::shared_ptr<OctreeTracer> m_octree_tracer;
 	std::shared_ptr<DynamicOctree> m_dynamic_octree;
-	std::shared_ptr<OctreeTracer> m_octree_tracer;
 	std::shared_ptr<DynamicOctreeTracer> m_dynamic_octree_tracer;
-	std::shared_ptr<PathTracer> m_path_tracer;
-	std::shared_ptr<PathTracerViewer> m_path_tracer_viewer;
+	// std::shared_ptr<PathTracer> m_path_tracer;
+	// std::shared_ptr<PathTracerViewer> m_path_tracer_viewer;
 	std::shared_ptr<EnvironmentMap> m_environment_map;
 	std::shared_ptr<Lighting> m_lighting;
 
 	// multithreading loader
-	std::shared_ptr<LoaderThread> m_loader_thread;
-	std::shared_ptr<PathTracerThread> m_path_tracer_thread;
+	// std::shared_ptr<LoaderThread> m_loader_thread;
+	// std::shared_ptr<PathTracerThread> m_path_tracer_thread;
 
 	// ui flags
 	enum class UIStates { kEmpty, kOctreeTracer, kPathTracing, kLoading } m_ui_state{UIStates::kOctreeTracer};

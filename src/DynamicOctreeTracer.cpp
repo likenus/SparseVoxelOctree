@@ -121,7 +121,8 @@ void DynamicOctreeTracer::CmdDrawPipeline(const std::shared_ptr<myvk::CommandBuf
 }
 
 void DynamicOctreeTracer::Resize(uint32_t width, uint32_t height) {
-    // TODO: implement
+    m_width = width;
+    m_height = height;
 }
 
 

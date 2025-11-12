@@ -80,7 +80,13 @@ add_executable(SparseVoxelOctree
 		src/UIOctreeTracer.hpp
 		src/UILighting.cpp
 		src/UILighting.hpp
-		)
+		src/VoxelGenerator.cpp
+		src/VoxelGenerator.h
+		src/DynamicOctreeTracer.cpp
+		src/DynamicOctreeTracer.hpp
+		src/DynamicOctree.cpp
+		src/DynamicOctree.hpp
+)
 
 find_package(Threads REQUIRED)
 target_link_libraries(SparseVoxelOctree PRIVATE dep shader Threads::Threads)

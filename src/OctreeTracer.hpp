@@ -12,7 +12,7 @@
 
 class OctreeTracer {
 public:
-	enum class ViewTypes { kDiffuse = 0, kNormal, kPosition, kIteration } m_view_type = ViewTypes::kDiffuse;
+	enum class ViewTypes { kDiffuse = 0, kNormal, kPosition, kIteration, kDebug } m_view_type = ViewTypes::kDiffuse;
 	bool m_beam_enable{true};
 
 private:

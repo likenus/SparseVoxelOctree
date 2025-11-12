@@ -11,6 +11,8 @@
 #include <spdlog/sinks/ringbuffer_sink.h>
 
 #include "Camera.hpp"
+#include "DynamicOctree.hpp"
+#include "DynamicOctreeTracer.hpp"
 #include "Lighting.hpp"
 #include "LoaderThread.hpp"
 #include "Octree.hpp"
@@ -66,7 +68,9 @@ private:
 	// global resources
 	std::shared_ptr<Camera> m_camera;
 	std::shared_ptr<Octree> m_octree;
+	std::shared_ptr<DynamicOctree> m_dynamic_octree;
 	std::shared_ptr<OctreeTracer> m_octree_tracer;
+	std::shared_ptr<DynamicOctreeTracer> m_dynamic_octree_tracer;
 	std::shared_ptr<PathTracer> m_path_tracer;
 	std::shared_ptr<PathTracerViewer> m_path_tracer_viewer;
 	std::shared_ptr<EnvironmentMap> m_environment_map;
@@ -77,7 +81,7 @@ private:
 	std::shared_ptr<PathTracerThread> m_path_tracer_thread;
 
 	// ui flags
-	enum class UIStates { kEmpty, kOctreeTracer, kPathTracing, kLoading } m_ui_state{UIStates::kEmpty};
+	enum class UIStates { kEmpty, kOctreeTracer, kPathTracing, kLoading } m_ui_state{UIStates::kOctreeTracer};
 	bool m_ui_display_flag{true};
 
 	std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> m_log_sink;
@@ -88,6 +92,7 @@ private:
 	void create_framebuffers();
 	void resize();
 	void draw_frame();
+	void generate_and_draw();
 
 	void ui_switch_state();
 	void ui_render_main();

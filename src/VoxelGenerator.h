@@ -1,0 +1,14 @@
+//
+// Created by linus on 08.11.2025.
+//
+
+#ifndef SPARSEVOXELOCTREE_VOXELGENERATOR_H
+#define SPARSEVOXELOCTREE_VOXELGENERATOR_H
+
+
+class VoxelGenerator {
+
+};
+
+
+#endif //SPARSEVOXELOCTREE_VOXELGENERATOR_H

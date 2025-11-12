@@ -33,6 +33,96 @@ static std::string get_base_dir(const char *filename) {
 	return {filename, s};
 }
 
+bool Scene::load_meshes_immediate(std::vector<Mesh> *meshes) {
+	tinyobj::attrib_t attrib;
+	std::vector<tinyobj::material_t> materials;
+	std::vector<tinyobj::shape_t> shapes;
+
+	
+
+	meshes->clear();
+	meshes->resize(materials.size());
+
+	glm::vec3 pmin(FLT_MAX), pmax(-FLT_MAX);
+	// Loop over shapes
+	for (const auto &shape : shapes) {
+		size_t index_offset = 0, face = 0;
+		// Loop over faces(polygon)
+		for (const auto &num_face_vertex : shape.mesh.num_face_vertices) {
+			int mat = shape.mesh.material_ids[face];
+			// Loop over triangles in the face.
+			for (size_t v = 0; v < num_face_vertex; ++v) {
+				tinyobj::index_t index = shape.mesh.indices[index_offset + v];
+
+				meshes->at(mat).m_vertices.emplace_back();
+				Vertex &vert = meshes->at(mat).m_vertices.back();
+				vert.m_position = {attrib.vertices[3 * index.vertex_index + 0],
+				                   attrib.vertices[3 * index.vertex_index + 1],
+				                   attrib.vertices[3 * index.vertex_index + 2]};
+				pmin = glm::min(vert.m_position, pmin);
+				pmax = glm::max(vert.m_position, pmax);
+
+				if (index.texcoord_index != -1)
+					vert.m_texcoord = {attrib.texcoords[2 * index.texcoord_index + 0],
+					                   1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
+			}
+			index_offset += num_face_vertex;
+			face++;
+		}
+	}
+
+	// normalize all the vertex to [-1, 1]
+	{
+		glm::vec3 extent3 = pmax - pmin;
+		float extent = glm::max(extent3.x, glm::max(extent3.y, extent3.z)) * 0.5f;
+		float inv_extent = 1.0f / extent;
+		glm::vec3 center = (pmax + pmin) * 0.5f;
+		for (auto &i : *meshes)
+			for (auto &v : i.m_vertices)
+				v.m_position = (v.m_position - center) * inv_extent;
+	}
+
+	// set mesh material
+	std::unordered_map<std::string, uint32_t> texture_name_map;
+	for (uint32_t i = 0; i < meshes->size(); ++i) {
+		Mesh &mesh = (*meshes)[i];
+		if (mesh.m_vertices.empty())
+			continue;
+		mesh.m_albedo = {materials[i].diffuse[0], materials[i].diffuse[1], materials[i].diffuse[2]};
+		const std::string &texture_name = materials[i].diffuse_texname;
+		if (!texture_name.empty() && texture_name_map.find(texture_name) == texture_name_map.end()) {
+			uint32_t idx = texture_name_map.size();
+			texture_name_map[texture_name] = idx;
+		} else if (texture_name.empty())
+			mesh.m_texture_id = UINT32_MAX;
+	}
+
+	// set mesh texture id
+	for (uint32_t i = 0; i < meshes->size(); ++i) {
+		Mesh &mesh = (*meshes)[i];
+		if (!mesh.m_vertices.empty() && mesh.m_texture_id != UINT32_MAX) {
+			mesh.m_texture_id = texture_name_map[materials[i].diffuse_texname];
+		}
+	}
+
+	// cull empty meshes
+	{
+		uint32_t not_empty_cnt = meshes->size();
+		for (const Mesh &i : *meshes)
+			not_empty_cnt -= i.m_vertices.empty();
+		std::sort(meshes->begin(), meshes->end(),
+		          [](const Mesh &l, const Mesh &r) { return l.m_vertices.size() > r.m_vertices.size(); });
+		meshes->resize(not_empty_cnt);
+	}
+
+	if (meshes->empty()) {
+		spdlog::error("Empty mesh");
+		return false;
+	}
+
+	return true;
+}
+
 bool Scene::load_meshes(const char *filename, const char *base_dir, std::vector<Mesh> *meshes,
                         std::vector<std::string> *texture_filenames) {
 	tinyobj::attrib_t attrib;
@@ -58,6 +148,10 @@ bool Scene::load_meshes(const char *filename, const char *base_dir, std::vector<
 
 	meshes->clear();
 	meshes->resize(materials.size());
+
+	// debug
+	spdlog::info("Materials size: {}", materials.size());
+	spdlog::info("Shapes size: {}", shapes.size());
 
 	glm::vec3 pmin(FLT_MAX), pmax(-FLT_MAX);
 	// Loop over shapes
@@ -142,6 +236,13 @@ bool Scene::load_meshes(const char *filename, const char *base_dir, std::vector<
 		std::replace(replaced.begin(), replaced.end(), '\\', '/');
 		(*texture_filenames)[i.second] = base_dir + std::move(replaced);
 	}
+
+	// debug
+	spdlog::info("Meshes size: {}", meshes->size());
+	spdlog::info("Mesh size: {}", meshes[0].size());
+	spdlog::info("Vertices: {}", meshes[0][0].m_vertices.size());
+	spdlog::info("Pos: {} {} {}", meshes[0][0].m_vertices[0].m_position.x, meshes[0][0].m_vertices[0].m_position.y, meshes[0][0].m_vertices[0].m_position.z);
+	spdlog::info("Texcoord: {} {}", meshes[0][0].m_vertices[0].m_texcoord.r, meshes[0][0].m_vertices[0].m_texcoord.s);
 
 	return true;
 }

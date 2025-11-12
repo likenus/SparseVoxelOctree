@@ -9,7 +9,7 @@ layout(std430, set = OCTREE_SET, binding = 0) readonly buffer uuOctree { uint uO
 
 bool Octree_RayMarchOcclude(vec3 o, vec3 d);
 bool Octree_RayMarchLeaf(vec3 o, vec3 d, out vec3 o_pos, out vec3 o_color, out vec3 o_normal);
-bool Octree_RayMarchLeaf(vec3 o, vec3 d, out vec3 o_pos, out vec3 o_color, out vec3 o_normal, out uint o_iter);
+bool Octree_RayMarchLeaf(vec3 o, vec3 d, out vec3 o_pos, out vec3 o_color, out vec3 o_normal, out uint o_iter, out uint o_depth);
 bool Octree_RayMarchCoarse(vec3 o, vec3 d, float orig_sz, float dir_sz, out float o_t, out float o_size);
 
 // The following code is copied from
@@ -176,8 +176,9 @@ bool Octree_RayMarchCoarse(vec3 o, vec3 d, float orig_sz, float dir_sz, out floa
 	return scale < STACK_SIZE && t_min <= t_max;
 }
 
-bool Octree_RayMarchLeaf(vec3 o, vec3 d, out vec3 o_pos, out vec3 o_color, out vec3 o_normal, out uint o_iter) {
+bool Octree_RayMarchLeaf(vec3 o, vec3 d, out vec3 o_pos, out vec3 o_color, out vec3 o_normal, out uint o_iter, out uint o_depth) {
 	uint iter = 0;
+	uint depth = 0;
 
 	d.x = abs(d.x) > EPS ? d.x : (d.x >= 0 ? EPS : -EPS);
 	d.y = abs(d.y) > EPS ? d.y : (d.y >= 0 ? EPS : -EPS);
@@ -228,6 +229,7 @@ bool Octree_RayMarchLeaf(vec3 o, vec3 d, out vec3 o_pos, out vec3 o_color, out v
 
 		if ((cur & 0x80000000u) != 0 && t_min <= t_max) {
 			// INTERSECT
+			depth++;
 			float half_scale_exp2 = scale_exp2 * 0.5f;
 			vec3 t_center = half_scale_exp2 * t_coef + t_corner;
 
@@ -335,6 +337,7 @@ bool Octree_RayMarchLeaf(vec3 o, vec3 d, out vec3 o_pos, out vec3 o_color, out v
 	o_normal = norm;
 	o_color = unpackUnorm4x8(cur).xyz;
 	o_iter = iter;
+	o_depth = depth;
 
 	return scale < STACK_SIZE && t_min <= t_max;
 }

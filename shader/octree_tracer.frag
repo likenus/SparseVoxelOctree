@@ -33,16 +33,31 @@ void main() {
 	}
 
 	vec3 pos, color, normal;
-	uint iter;
-	bool hit = Octree_RayMarchLeaf(o, d, pos, color, normal, iter);
+	uint iter, depth;
+	bool hit = Octree_RayMarchLeaf(o, d, pos, color, normal, iter, depth);
 	if (!hit) {
 		pos = vec3(1.0);
 		normal = vec3(0.0);
 		color = Light(d);
 	}
-	oColor =
-	    vec4(uViewType == 3
-	             ? Heat(iter / 128.0)
-	             : (uViewType == 2 ? pos - 1.0 : (uViewType == 0 ? pow(color, vec3(1.0 / 2.2)) : normal * 0.5 + 0.5)),
-	         1.0);
+
+	switch (uViewType) {
+		case 0:
+			oColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
+			break;
+		case 1:
+			oColor = vec4(normal * 0.5 + 0.5, 1.0);
+			break;
+		case 2:
+			oColor = vec4(pos - 1.0, 1.0);
+			break;
+		case 3:
+			oColor = vec4(Heat(iter / 128.0), 1.0);
+			break;
+		case 4:
+			oColor = vec4(Heat(depth / 128.f), 1.0);
+			break;
+		default:
+			oColor = vec4(pow(color, vec3(1.0 / 2.2)), 1.0);
+	}
 }

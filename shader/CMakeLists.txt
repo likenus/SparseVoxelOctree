@@ -3,6 +3,7 @@ project(shader)
 
 set(SHADER_HEADER_PATH
 		octree.glsl
+		dyn_octree.glsl
 		camera.glsl
 		util.glsl
 		environment_map.glsl
@@ -30,6 +31,8 @@ set(SHADER_SRC
 
 		octree_tracer.frag
 		octree_tracer_beam.frag
+
+		dyn_octree_tracer.frag
 
 		path_tracer.comp
 		path_tracer_viewer_gen.frag

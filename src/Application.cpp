@@ -142,6 +142,7 @@ void Application::draw_frame() {
 	command_buffer->Begin();
 
 	if (m_ui_state != UIStates::kPathTracing && !m_octree->Empty()) {
+		// Beam optimization
 		m_octree_tracer->CmdBeamRenderPass(command_buffer, current_frame);
 	}
 	command_buffer->CmdBeginRenderPass(m_render_pass, m_framebuffers[image_index], {{{0.0f, 0.0f, 0.0f, 1.0f}}});
@@ -150,9 +151,47 @@ void Application::draw_frame() {
 	} else if (!m_octree->Empty()) {
 		m_octree_tracer->CmdDrawPipeline(command_buffer, current_frame);
 	}
+
+	// GUI
 	command_buffer->CmdNextSubpass();
 	m_imgui_renderer->CmdDrawPipeline(command_buffer, current_frame);
 	command_buffer->CmdEndRenderPass();
+	command_buffer->End();
+
+	m_frame_manager->Render();
+}
+
+/*
+ * Each frame:
+ * Generate procedural geometry
+ * Update octree
+ * Render image
+ */
+void Application::generate_and_draw() {
+	if (!m_frame_manager->NewFrame())
+		return;
+
+	uint32_t image_index = m_frame_manager->GetCurrentImageIndex();
+	uint32_t current_frame = m_frame_manager->GetCurrentFrame();
+
+	if (m_ui_state == UIStates::kOctreeTracer)
+		m_camera->UpdateFrameUniformBuffer(current_frame);
+
+	const std::shared_ptr<myvk::CommandBuffer> &command_buffer = m_frame_manager->GetCurrentCommandBuffer();
+
+	command_buffer->GetCommandPoolPtr()->Reset();
+	command_buffer->Begin();
+
+	// Draw Frame
+	command_buffer->CmdBeginRenderPass(m_render_pass, m_framebuffers[image_index], {{{0.0f, 0.0f, 0.0f, 1.0f}}});
+
+	m_dynamic_octree_tracer->CmdDrawPipeline(command_buffer, current_frame);
+
+	// GUI
+	command_buffer->CmdNextSubpass();
+	m_imgui_renderer->CmdDrawPipeline(command_buffer, current_frame);
+	command_buffer->CmdEndRenderPass();
+
 	command_buffer->End();
 
 	m_frame_manager->Render();
@@ -191,7 +230,7 @@ void Application::initialize_vulkan() {
 		const auto &physical_device = physical_devices[0];
 		spdlog::info("Physical Device: {}", physical_device->GetProperties().vk10.deviceName);
 
-		std::vector<const char *> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+		std::vector<const char *> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE_4_EXTENSION_NAME};
 
 		if (physical_device->GetExtensionSupport(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME)) {
 			extensions.push_back(VK_EXT_CONSERVATIVE_RASTERIZATION_EXTENSION_NAME);
@@ -319,11 +358,14 @@ Application::Application() {
 	m_lighting = Lighting::Create(m_environment_map);
 
 	m_camera = Camera::Create(m_device, kFrameCount + 1); // reserve a camera buffer for path tracer
-	m_camera->m_position = glm::vec3(1.5);
+	m_camera->m_position = glm::vec3(1.5, 1.5, 2.5);
 	m_octree = Octree::Create(m_device);
 	m_octree_tracer = OctreeTracer::Create(m_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
 	m_path_tracer = PathTracer::Create(m_octree, m_camera, m_lighting, m_path_tracer_command_pool);
 	m_path_tracer_viewer = PathTracerViewer::Create(m_path_tracer, m_render_pass, 0);
+
+	m_dynamic_octree = DynamicOctree::Create(m_device, m_main_queue);
+	m_dynamic_octree_tracer = DynamicOctreeTracer::Create(m_dynamic_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
 
 	m_loader_thread = LoaderThread::Create(m_octree, m_loader_queue, m_main_queue);
 	m_path_tracer_thread = PathTracerThread::Create(m_path_tracer_viewer, m_path_tracer_queue, m_main_queue);
@@ -361,7 +403,8 @@ void Application::Run() {
 			ui_render_main();
 		ImGui::Render();
 
-		draw_frame();
+		// draw_frame();
+		generate_and_draw();
 		lst_time = cur_time;
 	}
 }

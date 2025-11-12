@@ -42,6 +42,8 @@ private:
 	static bool load_meshes(const char *filename, const char *base_dir, std::vector<Mesh> *meshes,
 	                        std::vector<std::string> *texture_filenames);
 
+	static bool load_meshes_immediate(std::vector<Mesh> *meshes);
+
 	void load_buffers_and_draw_cmd(const std::shared_ptr<myvk::Queue> &graphics_queue, const std::vector<Mesh> &meshes);
 
 	void load_textures(const std::shared_ptr<myvk::Queue> &graphics_queue,

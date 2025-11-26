@@ -59,7 +59,7 @@ void DynamicOctreeTracer::create_layouts(const std::shared_ptr<myvk::Device> &de
             m_camera_ptr->GetDescriptorSetLayout(),
             m_lighting_ptr->GetEnvironmentMapPtr()->GetDescriptorSetLayout()
         },
-        {{VK_SHADER_STAGE_FRAGMENT_BIT, 0, 2 * sizeof(uint32_t)}}); // TODO constants
+        {{VK_SHADER_STAGE_FRAGMENT_BIT, 0, 2 * sizeof(uint32_t)}});
 }
 
 void DynamicOctreeTracer::create_main_graphics_pipeline(

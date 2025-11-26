@@ -46,6 +46,7 @@ public:
 
     const std::shared_ptr<Camera> &GetCameraPtr() const { return m_camera_ptr; }
     const std::shared_ptr<Lighting> &GetLightingPtr() const { return m_lighting_ptr; }
+    const std::shared_ptr<DynamicOctree> &GetOctreePtr() const { return m_dynamic_octree_ptr; }
 
     void Resize(uint32_t width, uint32_t height);
 

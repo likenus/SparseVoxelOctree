@@ -17,10 +17,24 @@ layout(location = 0) out vec4 oColor;
 void main() {
     vec3 o = uPosition.xyz, d = Camera_GenRay(ivec2(gl_FragCoord.xy) / vec2(uWidth, uHeight));
 
-    vec3 _pos;
-    vec4 _col;
+    vec3 o_pos;
+    vec4 o_col;
     oColor = vec4(0.f);
-    if (Simple_Raymarch(o, d, _pos, _col)) {
-        oColor = vec4(_pos, 1.f);
+    if (SimpleRaymarch(o, d, o_pos, o_col)) {
+        oColor = vec4(o_pos - 1.f, 1.f);
+    } else {
+        oColor = vec4(1.f);
     }
+
+
+    float t;
+    if (RaycastOctree(o, d, t, o_pos)) {
+        oColor = vec4(o_pos - 1.f, 1.f);
+    }
+
+    /*
+    if (WireFrameOctree(o, d, o_pos, o_col)) {
+        oColor = vec4(o_pos - 1.f, 1.f);
+    }
+*/
 }

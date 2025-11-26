@@ -86,6 +86,8 @@ add_executable(SparseVoxelOctree
 		src/DynamicOctreeTracer.hpp
 		src/DynamicOctree.cpp
 		src/DynamicOctree.hpp
+        src/UIDynamicOctreeTracer.cpp
+        src/UIDynamicOctreeTracer.hpp
 )
 
 find_package(Threads REQUIRED)

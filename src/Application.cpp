@@ -15,6 +15,7 @@
 
 #include "ImGuiUtil.hpp"
 #include "UICamera.hpp"
+#include "UIDynamicOctreeTracer.hpp"
 #include "UILighting.hpp"
 #include "UILoader.hpp"
 #include "UILog.hpp"
@@ -123,8 +124,6 @@ void Application::resize() {
 	}
 	VkExtent2D extent = m_frame_manager->GetSwapchain()->GetExtent();
 	m_camera->m_aspect_ratio = extent.width / float(extent.height);
-	// m_path_tracer_viewer->Resize(extent.width, extent.height);
-	// m_octree_tracer->Resize(extent.width, extent.height);
 	m_dynamic_octree_tracer->Resize(extent.width, extent.height);
 }
 
@@ -175,10 +174,13 @@ void Application::generate_and_draw() {
 	uint32_t image_index = m_frame_manager->GetCurrentImageIndex();
 	uint32_t current_frame = m_frame_manager->GetCurrentFrame();
 
-	if (m_ui_state == UIStates::kOctreeTracer)
-		m_camera->UpdateFrameUniformBuffer(current_frame);
+	m_camera->UpdateFrameUniformBuffer(current_frame);
 
 	const std::shared_ptr<myvk::CommandBuffer> &command_buffer = m_frame_manager->GetCurrentCommandBuffer();
+
+	if (m_dynamic_octree->IsRunning()) {
+		m_dynamic_octree->DoStep();
+	}
 
 	command_buffer->GetCommandPoolPtr()->Reset();
 	command_buffer->Begin();
@@ -359,7 +361,7 @@ Application::Application() {
 	m_lighting = Lighting::Create(m_environment_map);
 
 	m_camera = Camera::Create(m_device, kFrameCount + 1); // reserve a camera buffer for path tracer
-	m_camera->m_position = glm::vec3(1.5, 1.5, 2.5);
+	m_camera->m_position = glm::vec3(1.5, 1.1, 2.1);
 	// m_octree = Octree::Create(m_device);
 	// m_octree_tracer = OctreeTracer::Create(m_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
 	// m_path_tracer = PathTracer::Create(m_octree, m_camera, m_lighting, m_path_tracer_command_pool);
@@ -396,8 +398,7 @@ void Application::Run() {
 
 		glfwPollEvents();
 
-		if (m_ui_state == UIStates::kOctreeTracer)
-			m_camera->Control(m_window, float(cur_time - lst_time));
+		m_camera->Control(m_window, float(cur_time - lst_time));
 
 		ui_switch_state();
 
@@ -406,8 +407,7 @@ void Application::Run() {
 		if (m_ui_display_flag)
 			ui_render_main();
 		ImGui::Render();
-
-		// draw_frame();
+		
 		generate_and_draw();
 		lst_time = cur_time;
 	}
@@ -449,6 +449,8 @@ void Application::ui_menubar() {
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 	ImGui::BeginMainMenuBar();
 
+	UI::DynamicOctreeTracerMenuItems(m_dynamic_octree_tracer);
+
 	// if (m_ui_state == UIStates::kPathTracing)
 	// 	UI::PathTracerControlButtons(m_path_tracer_thread, &open_modal);
 	// else {
@@ -470,6 +472,14 @@ void Application::ui_menubar() {
 	UI::LogMenuItems(m_log_sink);
 
 	// Status bar
+	float indent_w = ImGui::GetWindowContentRegionWidth();
+	char buf[128];
+
+	sprintf(buf, "FPS %.1f", ImGui::GetIO().Framerate);
+	indent_w -= ImGui::CalcTextSize(buf).x;
+	ImGui::SameLine(indent_w);
+	ImGui::TextUnformatted(buf);
+
 	// if (m_ui_state == UIStates::kOctreeTracer)
 	// 	UI::OctreeTracerRightStatus(m_octree_tracer);
 	// else if (m_ui_state == UIStates::kPathTracing)

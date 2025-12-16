@@ -6,6 +6,9 @@
 #define ENVIRONMENT_MAP_SET 2
 #define ENVIRONMENT_MAP_ENABLE_SAMPLE 0
 #include "environment_map.glsl"
+
+#define EPS 1e-7
+
 layout(set = 3, binding = 0) uniform sampler2D uBeamImage;
 layout(location = 0) out vec4 oColor;
 
@@ -39,6 +42,14 @@ void main() {
 		pos = vec3(1.0);
 		normal = vec3(0.0);
 		color = Light(d);
+	} else { // cast shadow
+		vec3 l = normalize(vec3(2.f, 1.f, 1.f));
+		o = pos + l * EPS;
+		vec3 _pos, _col, _normal;
+		uint _iter, _depth;
+		if (Octree_RayMarchLeaf(o, l, _pos, _col, _normal, _iter, _depth)) {
+			color *= (0.75f + .25f * dot(l, -d));
+		}
 	}
 
 	switch (uViewType) {

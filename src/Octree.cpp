@@ -33,6 +33,22 @@ void Octree::Update(const std::shared_ptr<myvk::CommandPool> &command_pool,
 	}
 	m_descriptor_set->UpdateStorageBuffer(m_buffer, 0, 0, 0, actual_range);
 }
+
+void Octree::Update(const std::shared_ptr<myvk::CommandPool> &command_pool,
+					const std::shared_ptr<OctreeBuilder2> &builder) {
+	uint32_t octree_range = builder->GetOctreeRange(command_pool);
+	m_buffer = builder->GetOctree();
+	m_level = builder->GetLevel();
+	m_range = octree_range;
+
+	uint32_t actual_range = octree_range;
+	if (m_buffer->GetSize() < actual_range) {
+		spdlog::error("Octree size exceed");
+		actual_range = m_buffer->GetSize();
+	}
+	m_descriptor_set->UpdateStorageBuffer(m_buffer, 0, 0, 0, actual_range);
+}
+
 void Octree::CmdTransferOwnership(const std::shared_ptr<myvk::CommandBuffer> &command_buffer, uint32_t src_queue_family,
                                   uint32_t dst_queue_family, VkPipelineStageFlags src_stage,
                                   VkPipelineStageFlags dst_stage) const {

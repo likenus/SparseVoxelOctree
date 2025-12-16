@@ -2,6 +2,7 @@
 #define OCTREE_HPP
 
 #include "OctreeBuilder.hpp"
+#include "OctreeBuilder2.hpp"
 #include "myvk/Buffer.hpp"
 #include "myvk/DescriptorSet.hpp"
 
@@ -18,6 +19,7 @@ public:
 	static std::shared_ptr<Octree> Create(const std::shared_ptr<myvk::Device> &device);
 
 	void Update(const std::shared_ptr<myvk::CommandPool> &command_pool, const std::shared_ptr<OctreeBuilder> &builder);
+	void Update(const std::shared_ptr<myvk::CommandPool> &command_pool, const std::shared_ptr<OctreeBuilder2> &builder);
 	bool Empty() const { return m_buffer == nullptr; }
 
 	const std::shared_ptr<myvk::Buffer> &GetBuffer() const { return m_buffer; }

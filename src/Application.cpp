@@ -123,9 +123,9 @@ void Application::resize() {
 	}
 	VkExtent2D extent = m_frame_manager->GetSwapchain()->GetExtent();
 	m_camera->m_aspect_ratio = extent.width / float(extent.height);
-	// m_path_tracer_viewer->Resize(extent.width, extent.height);
-	// m_octree_tracer->Resize(extent.width, extent.height);
-	m_dynamic_octree_tracer->Resize(extent.width, extent.height);
+	m_path_tracer_viewer->Resize(extent.width, extent.height);
+	m_octree_tracer->Resize(extent.width, extent.height);
+	// m_dynamic_octree_tracer->Resize(extent.width, extent.height);
 }
 
 void Application::draw_frame() {
@@ -142,16 +142,16 @@ void Application::draw_frame() {
 	command_buffer->GetCommandPoolPtr()->Reset();
 	command_buffer->Begin();
 
-	// if (m_ui_state != UIStates::kPathTracing && !m_octree->Empty()) {
-	// 	// Beam optimization
-	// 	m_octree_tracer->CmdBeamRenderPass(command_buffer, current_frame);
-	// }
-	// command_buffer->CmdBeginRenderPass(m_render_pass, m_framebuffers[image_index], {{{0.0f, 0.0f, 0.0f, 1.0f}}});
-	// if (m_ui_state == UIStates::kPathTracing) {
-	// 	m_path_tracer_viewer->CmdDrawPipeline(command_buffer, current_frame);
-	// } else if (!m_octree->Empty()) {
-	// 	m_octree_tracer->CmdDrawPipeline(command_buffer, current_frame);
-	// }
+	if (m_ui_state != UIStates::kPathTracing && !m_octree->Empty()) {
+		// Beam optimization
+		m_octree_tracer->CmdBeamRenderPass(command_buffer, current_frame);
+	}
+	command_buffer->CmdBeginRenderPass(m_render_pass, m_framebuffers[image_index], {{{0.0f, 0.0f, 0.0f, 1.0f}}});
+	if (m_ui_state == UIStates::kPathTracing) {
+		m_path_tracer_viewer->CmdDrawPipeline(command_buffer, current_frame);
+	} else if (!m_octree->Empty()) {
+		m_octree_tracer->CmdDrawPipeline(command_buffer, current_frame);
+	}
 
 	// GUI
 	command_buffer->CmdNextSubpass();
@@ -161,6 +161,7 @@ void Application::draw_frame() {
 
 	m_frame_manager->Render();
 }
+
 
 /*
  * Each frame:
@@ -186,7 +187,7 @@ void Application::generate_and_draw() {
 	// Draw Frame
 	command_buffer->CmdBeginRenderPass(m_render_pass, m_framebuffers[image_index], {{{0.0f, 0.0f, 0.0f, 1.0f}}});
 
-	m_dynamic_octree_tracer->CmdDrawPipeline(command_buffer, current_frame);
+	// m_dynamic_octree_tracer->CmdDrawPipeline(command_buffer, current_frame);
 
 	// GUI
 	command_buffer->CmdNextSubpass();
@@ -360,23 +361,31 @@ Application::Application() {
 
 	m_camera = Camera::Create(m_device, kFrameCount + 1); // reserve a camera buffer for path tracer
 	m_camera->m_position = glm::vec3(1.5, 1.5, 2.5);
-	// m_octree = Octree::Create(m_device);
-	// m_octree_tracer = OctreeTracer::Create(m_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
-	// m_path_tracer = PathTracer::Create(m_octree, m_camera, m_lighting, m_path_tracer_command_pool);
-	// m_path_tracer_viewer = PathTracerViewer::Create(m_path_tracer, m_render_pass, 0);
+	m_octree = Octree::Create(m_device);
 
-	m_dynamic_octree = DynamicOctree::Create(m_device, m_main_queue);
-	m_dynamic_octree_tracer = DynamicOctreeTracer::Create(m_dynamic_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
+	uint32_t octree_level = 10;
+	std::shared_ptr<VoxelGenerator> generator = VoxelGenerator::Create(m_device, m_main_command_pool, "F[+F][>--F++<]F[-F][>++F--<]F", octree_level);
 
-	// m_loader_thread = LoaderThread::Create(m_octree, m_loader_queue, m_main_queue);
-	// m_path_tracer_thread = PathTracerThread::Create(m_path_tracer_viewer, m_path_tracer_queue, m_main_queue);
+	m_octree_builder_2 = OctreeBuilder2::Create(generator, m_main_command_pool);
+
+	generate();
+
+	m_octree_tracer = OctreeTracer::Create(m_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
+	m_path_tracer = PathTracer::Create(m_octree, m_camera, m_lighting, m_path_tracer_command_pool);
+	m_path_tracer_viewer = PathTracerViewer::Create(m_path_tracer, m_render_pass, 0);
+
+	// m_dynamic_octree = DynamicOctree::Create(m_device, m_main_queue);
+	// m_dynamic_octree_tracer = DynamicOctreeTracer::Create(m_dynamic_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
+
+	m_loader_thread = LoaderThread::Create(m_octree, m_loader_queue, m_main_queue);
+	m_path_tracer_thread = PathTracerThread::Create(m_path_tracer_viewer, m_path_tracer_queue, m_main_queue);
 
 }
 
 Application::~Application() {
 	// Stop threads
-	// m_path_tracer_thread = nullptr;
-	// m_loader_thread = nullptr;
+	m_path_tracer_thread = nullptr;
+	m_loader_thread = nullptr;
 	// Wait all work done
 	m_device->WaitIdle();
 
@@ -386,7 +395,7 @@ Application::~Application() {
 }
 
 void Application::Load(const char *filename, uint32_t octree_level) {
-	// m_loader_thread->Launch(filename, octree_level);
+	m_loader_thread->Launch(filename, octree_level);
 }
 
 void Application::Run() {
@@ -407,39 +416,39 @@ void Application::Run() {
 			ui_render_main();
 		ImGui::Render();
 
-		// draw_frame();
-		generate_and_draw();
+		draw_frame();
+		// generate_and_draw();
 		lst_time = cur_time;
 	}
 }
 
 void Application::ui_switch_state() {
-	// if (m_path_tracer_thread->IsRunning()) {
-	// 	m_ui_state = UIStates::kPathTracing;
-	// } else if (m_loader_thread->IsRunning()) {
-	// 	m_ui_state = UIStates::kLoading;
-	//
-	// 	if (m_loader_thread->TryJoin()) {
-	// 		m_ui_state = m_octree->Empty() ? UIStates::kEmpty : UIStates::kOctreeTracer;
-	// 	}
-	// } else if (m_octree->Empty())
-	// 	m_ui_state = UIStates::kEmpty;
-	// else {
-	// 	m_ui_state = UIStates::kOctreeTracer;
-	// }
+	if (m_path_tracer_thread->IsRunning()) {
+		m_ui_state = UIStates::kPathTracing;
+	} else if (m_loader_thread->IsRunning()) {
+		m_ui_state = UIStates::kLoading;
+
+		if (m_loader_thread->TryJoin()) {
+			m_ui_state = m_octree->Empty() ? UIStates::kEmpty : UIStates::kOctreeTracer;
+		}
+	} else if (m_octree->Empty())
+		m_ui_state = UIStates::kEmpty;
+	else {
+		m_ui_state = UIStates::kOctreeTracer;
+	}
 }
 
 void Application::ui_render_main() {
 	if (m_ui_state == UIStates::kLoading) {
 		ImGui::OpenPopup(UI::kLoaderLoadingModal);
-		// UI::LoaderLoadingModal(m_loader_thread);
+		UI::LoaderLoadingModal(m_loader_thread);
 	}
 	ui_menubar();
 
-	// UI::LoaderLoadSceneModal(m_loader_thread);
-	// UI::PathTracerStartModal(m_path_tracer_thread);
-	// UI::PathTracerStopModal(m_path_tracer_thread);
-	// UI::PathTracerExportEXRModal(m_path_tracer_thread);
+	UI::LoaderLoadSceneModal(m_loader_thread);
+	UI::PathTracerStartModal(m_path_tracer_thread);
+	UI::PathTracerStopModal(m_path_tracer_thread);
+	UI::PathTracerExportEXRModal(m_path_tracer_thread);
 	UI::LightingLoadEnvMapModal(m_main_command_pool, m_lighting);
 }
 
@@ -449,20 +458,20 @@ void Application::ui_menubar() {
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 	ImGui::BeginMainMenuBar();
 
-	// if (m_ui_state == UIStates::kPathTracing)
-	// 	UI::PathTracerControlButtons(m_path_tracer_thread, &open_modal);
-	// else {
-	// 	UI::LoaderLoadButton(m_loader_thread, &open_modal);
-	// 	if (m_ui_state == UIStates::kOctreeTracer)
-	// 		UI::PathTracerStartButton(m_path_tracer_thread, &open_modal);
-	// }
+	if (m_ui_state == UIStates::kPathTracing)
+		UI::PathTracerControlButtons(m_path_tracer_thread, &open_modal);
+	else {
+		UI::LoaderLoadButton(m_loader_thread, &open_modal);
+		if (m_ui_state == UIStates::kOctreeTracer)
+			UI::PathTracerStartButton(m_path_tracer_thread, &open_modal);
+	}
 
 	ImGui::Separator();
 
-	// if (m_ui_state == UIStates::kPathTracing)
-	// 	UI::PathTracerMenuItems(m_path_tracer_thread);
+	if (m_ui_state == UIStates::kPathTracing)
+		UI::PathTracerMenuItems(m_path_tracer_thread);
 	if (m_ui_state == UIStates::kOctreeTracer) {
-		// UI::OctreeTracerMenuItems(m_octree_tracer);
+		UI::OctreeTracerMenuItems(m_octree_tracer);
 		UI::CameraMenuItems(m_camera);
 		UI::LightingMenuItems(m_main_command_pool, m_lighting, &open_modal);
 	}
@@ -470,10 +479,10 @@ void Application::ui_menubar() {
 	UI::LogMenuItems(m_log_sink);
 
 	// Status bar
-	// if (m_ui_state == UIStates::kOctreeTracer)
-	// 	UI::OctreeTracerRightStatus(m_octree_tracer);
-	// else if (m_ui_state == UIStates::kPathTracing)
-	// 	UI::PathTracerRightStatus(m_path_tracer_thread);
+	if (m_ui_state == UIStates::kOctreeTracer)
+		UI::OctreeTracerRightStatus(m_octree_tracer);
+	else if (m_ui_state == UIStates::kPathTracing)
+		UI::PathTracerRightStatus(m_path_tracer_thread);
 
 	ImGui::EndMainMenuBar();
 	ImGui::PopStyleVar();
@@ -494,4 +503,28 @@ void Application::glfw_key_callback(GLFWwindow *window, int key, int scancode, i
 void Application::glfw_framebuffer_resize_callback(GLFWwindow *window, int width, int height) {
 	auto *app = (Application *)glfwGetWindowUserPointer(window);
 	app->m_frame_manager->Resize();
+}
+
+void Application::generate() {
+	spdlog::info("Begin generating");
+	auto command_buffer = myvk::CommandBuffer::Create(m_main_command_pool);
+
+	auto fence = myvk::Fence::Create(m_device);
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	command_buffer->Begin();
+	m_octree_builder_2->CmdBuild(command_buffer);
+	command_buffer->End();
+
+	command_buffer->Submit(fence);
+
+	fence->Wait();
+
+	m_octree->Update(m_main_command_pool, m_octree_builder_2);
+
+	auto end = std::chrono::high_resolution_clock::now();
+
+	spdlog::info("Finished building octree. Took {} ms.",
+		std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
 }

@@ -10,8 +10,8 @@ layout(set = 1, binding = 0) uniform sampler2D uTextures[kTextureNum];
 layout(push_constant) uniform uuPushConstant { uint uCountOnly, uTextureId, uAlbedo; };
 
 layout(location = 0) in vec2 gTexcoord;
-layout(location = 1) flat in uint gAxis;
 layout(location = 2) flat in uvec4 gAABB;
+layout(location = 1) flat in uint gAxis;
 layout(location = 3) flat in uvec2 gDepthRange;
 
 uvec3 GetVoxePos() {

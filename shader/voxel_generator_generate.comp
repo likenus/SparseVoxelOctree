@@ -1,0 +1,19 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(binding = 1) uniform uuAxiomInfo { uint uAxiomLength, uOffset, uDepth; };
+layout(binding = 3) buffer uuTranslations { vec3 uTranslation[]; };
+layout(binding = 5) buffer uuVoxelFragmentList { uvec2 uVoxelFragmentList[]; };
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+
+    uint uColor = 0x00ff00u;
+
+    uvec3 pos = uvec3(vec3(uTranslation[idx]) * (1u << uDepth)); // TODO: Convert to u32 coords
+
+    uVoxelFragmentList[idx].x = pos.x | (pos.y << 12u) |
+    ((pos.z & 0xffu) << 24u); // only store the last 8 bits of pos.z
+    uVoxelFragmentList[idx].y = ((pos.z >> 8u) << 28u) | (uColor & 0x00ffffffu);
+}

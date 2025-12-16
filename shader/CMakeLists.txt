@@ -21,6 +21,9 @@ set(SHADER_SRC
 		voxelizer.frag
 		voxelizer.geom
 
+		voxel_generator_iterate.comp
+		voxel_generator_generate.comp
+
 		voxelizer_conservative.frag
 		voxelizer_conservative.geom
 

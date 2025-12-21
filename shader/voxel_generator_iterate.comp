@@ -5,10 +5,10 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-layout(binding = 0) buffer uuAxiom { uint uAxiom[]; };
-layout(binding = 1) uniform uuAxiomInfo { uint uAxiomLength, uOffset, uDepth; };
-layout(binding = 2) uniform uuTurtleConstants { vec3 _D, _N, _P, _O;
-                                                       float uPhi, uStep; };
+layout(binding = 0) readonly buffer uuAxiom { uint uAxiom[]; };
+layout(binding = 1) buffer uuAxiomInfo { uint uAxiomLength, uOffset, uDepth, uOctreeLevel, uFragmentCount, uNumTerminals; };
+layout(binding = 2) readonly buffer uuTurtleConstants { vec3 _D, _N, _O;
+                                               float uPhi, uStep; };
 layout(binding = 3) buffer uuTranslations { vec3 uTranslation[]; };
 layout(binding = 4) buffer uuRotations { vec4 uRotation[]; };
 
@@ -16,39 +16,38 @@ void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= uOffset) return;
 
-    vec3 D, N, P;
+    vec3 D, N;
 
     vec3 translation_stack[1];
     vec4 rotation_stack[1];
-    uint branch = 0, terminal = 0;
-    vec3 translation = _O + vec3(uTranslation[idx]);
-    vec4 rotation = vec4(uRotation[idx]);
+    uint branch = 0, terminal = 0, voxel_resolution = (1 << uOctreeLevel);
+    vec3 translation = vec3(uTranslation[idx + (uOffset / uNumTerminals)]);
+    vec4 rotation = vec4(uRotation[idx + (uOffset / uNumTerminals)]);
 
-    D = normalize(quat_rotate(rotation, _D));
-    N = normalize(quat_rotate(rotation, _N));
-    P = normalize(quat_rotate(rotation, _P));
 
     for (uint i = 0; i < uAxiomLength; i++) {
+        D = quat_rotate(_D, rotation);
+        N = quat_rotate(_N, rotation);
         uint literal = uAxiom[i];
         switch (literal) {
             case ASCII_F:
                 // forward
                 translation += D * uStep;
-                break;
-            case ASCII_X:
+                //translation = floor(translation * voxel_resolution) * uStep + uStep * .5f;
+
                 // write position
-                uint writeIdx = uOffset + uAxiomLength * idx + terminal;
+                uint writeIdx = uOffset + uNumTerminals * idx + terminal;
                 uTranslation[writeIdx] = translation;
                 uRotation[writeIdx] = rotation;
                 terminal++;
                 break;
             case ASCII_PLUS:
                 // right turn
-                rotation = quat_mult(rotation, quat_rotate(uPhi, N));
+                rotation = quat_mult(rotation, quat_rotate(-uPhi, N));
                 break;
             case ASCII_MINUS:
                 // left turn
-                rotation = quat_mult(rotation, quat_rotate(-uPhi, N));
+                rotation = quat_mult(rotation, quat_rotate(uPhi, N));
                 break;
             case ASCII_LT: // <
                 // roll ccw

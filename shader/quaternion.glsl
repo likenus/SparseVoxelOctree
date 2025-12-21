@@ -15,15 +15,9 @@ vec4 quat_conjugate(vec4 q) {
 }
 
 // Rotate v around axis cw by phi degrees
-vec4 quat_rotate(float phi, vec3 axis, vec4 v) {
+vec3 quat_rotate(vec3 v, float phi, vec3 axis) {
     vec4 r = vec4(cos(phi / 2.f), axis * sin(phi / 2.f));
-    return quat_mult(quat_mult(r, v), quat_conjugate(r));
-}
-
-// Rotate v around axis cw by phi degrees
-vec3 quat_rotate(float phi, vec3 axis, vec3 v) {
-    vec4 r = vec4(cos(phi / 2.f), axis * sin(phi / 2.f));
-    return quat_mult(quat_mult(r, vec4(0.f, v)), quat_conjugate(r)).xyz;
+    return quat_mult(quat_mult(r, vec4(0.f, v)), quat_conjugate(r)).yzw;
 }
 
 // Create cw rotation around axis with phi degrees
@@ -32,13 +26,8 @@ vec4 quat_rotate(float phi, vec3 axis) {
 }
 
 // Rotate v using r
-vec3 quat_rotate(vec4 r, vec3 v) {
-    return quat_mult(quat_mult(r, vec4(0.f, v)), quat_conjugate(r)).xyz;
-}
-
-// Rotate v using r
-vec4 quat_rotate(vec4 r, vec4 v) {
-    return quat_mult(quat_mult(r, v), quat_conjugate(r));
+vec3 quat_rotate(vec3 v, vec4 r) {
+    return quat_mult(quat_mult(r, vec4(0.f, v)), quat_conjugate(r)).yzw;
 }
 
 #endif

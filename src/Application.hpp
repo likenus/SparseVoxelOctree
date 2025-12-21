@@ -69,6 +69,7 @@ private:
 	// global resources
 	std::shared_ptr<Camera> m_camera;
 	std::shared_ptr<Octree> m_octree;
+	std::shared_ptr<VoxelGenerator> m_voxel_generator;
 	std::shared_ptr<OctreeBuilder2> m_octree_builder_2;
 	std::shared_ptr<OctreeTracer> m_octree_tracer;
 	// std::shared_ptr<DynamicOctree> m_dynamic_octree;

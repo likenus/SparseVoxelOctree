@@ -1,7 +1,7 @@
 #ifndef ASCII
 #define ASCII
 
-#define ASCII_F 15
+#define ASCII_F 70
 #define ASCII_X 88
 #define ASCII_SQR_BRACKET_OPEN 91
 #define ASCII_SQR_BRACKET_CLOSE 93

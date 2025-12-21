@@ -2,16 +2,18 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-layout(binding = 1) uniform uuAxiomInfo { uint uAxiomLength, uOffset, uDepth; };
+layout(binding = 1) buffer uuAxiomInfo { uint uAxiomLength, uOffset, uDepth, uOctreeLevel, uFragmentCount, uNumTerminals; };
 layout(binding = 3) buffer uuTranslations { vec3 uTranslation[]; };
 layout(binding = 5) buffer uuVoxelFragmentList { uvec2 uVoxelFragmentList[]; };
 
 void main() {
     uint idx = gl_GlobalInvocationID.x;
+    if (idx >= uOffset) return;
 
-    uint uColor = 0x00ff00u;
+    uint colors[8] = {0x0000ffu, 0x00ff00u, 0xff0000, 0x00ffff, 0xffff00, 0xffffff, 0x000000, 0xff00ff};
+    uint uColor = uint((log2(idx + 1) * 2)) % 8;
 
-    uvec3 pos = uvec3(vec3(uTranslation[idx]) * (1u << uDepth)); // TODO: Convert to u32 coords
+    uvec3 pos = uvec3(vec3(uTranslation[idx]) * (1u << uOctreeLevel));
 
     uVoxelFragmentList[idx].x = pos.x | (pos.y << 12u) |
     ((pos.z & 0xffu) << 24u); // only store the last 8 bits of pos.z

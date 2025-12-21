@@ -41,7 +41,7 @@ public:
 	static std::shared_ptr<OctreeBuilder2> Create(const std::shared_ptr<VoxelGenerator> &generator,
 	                                             const std::shared_ptr<myvk::CommandPool> &command_pool);
 	const std::shared_ptr<VoxelGenerator> &GetVoxelizerPtr() const { return m_voxel_generator_ptr; }
-	uint32_t GetLevel() const { return m_voxel_generator_ptr->GetDepth(); }
+	uint32_t GetLevel() const { return m_voxel_generator_ptr->GetLevel(); }
 
 	void CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &command_buffer) const;
 	VkDeviceSize GetOctreeRange(const std::shared_ptr<myvk::CommandPool> &command_pool) const;

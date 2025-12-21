@@ -88,6 +88,7 @@ add_executable(SparseVoxelOctree
 		src/DynamicOctree.hpp
         src/OctreeBuilder2.cpp
         src/OctreeBuilder2.hpp
+        src/Quaternion.hpp
 )
 
 find_package(Threads REQUIRED)

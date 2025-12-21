@@ -44,7 +44,7 @@ void OctreeBuilder2::create_buffers(const std::shared_ptr<myvk::Device> &device)
 	});
 
 	// Estimate octree buffer size
-	uint32_t octree_node_ratio = m_voxel_generator_ptr->GetDepth() / 1;
+	uint32_t octree_node_ratio = m_voxel_generator_ptr->GetLevel() / 1;
 	uint32_t octree_entry_num =
 	    std::max(kOctreeNodeNumMin, m_voxel_generator_ptr->GetVoxelFragmentCount() * octree_node_ratio);
 	octree_entry_num = std::min(octree_entry_num, kOctreeNodeNumMax);
@@ -169,7 +169,7 @@ void OctreeBuilder2::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &comman
 
 	command_buffer->CmdBindDescriptorSets({m_descriptor_set}, m_pipeline_layout, VK_PIPELINE_BIND_POINT_COMPUTE, {});
 
-	for (uint32_t i = 1; i <= m_voxel_generator_ptr->GetDepth(); ++i) {
+	for (uint32_t i = 1; i <= m_voxel_generator_ptr->GetLevel(); ++i) {
 		command_buffer->CmdBindPipeline(m_init_node_pipeline);
 		command_buffer->CmdDispatchIndirect(m_indirect_buffer);
 
@@ -182,7 +182,7 @@ void OctreeBuilder2::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &comman
 		command_buffer->CmdBindPipeline(m_tag_node_pipeline);
 		command_buffer->CmdDispatch(fragment_group_x, 1, 1);
 
-		if (i != m_voxel_generator_ptr->GetDepth()) {
+		if (i != m_voxel_generator_ptr->GetLevel()) {
 			command_buffer->CmdPipelineBarrier(
 			    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {},
 			    {m_octree_buffer->GetMemoryBarrier(VK_ACCESS_SHADER_WRITE_BIT,

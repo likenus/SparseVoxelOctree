@@ -35,7 +35,7 @@ private:
     std::shared_ptr<myvk::Buffer> m_axiom_buffer, m_axiom_info_buffer, m_turtle_constant_buffer,
     m_translation_buffer, m_rotation_buffer, m_voxel_fragment_buffer,
         m_axiom_staging_buffer, m_axiom_info_staging_buffer, m_turtle_constants_staging_buffer,
-        m_rotation_staging_buffer, m_translation_staging_buffer, m_debug_buffer;
+        m_rotation_staging_buffer, m_translation_staging_buffer, m_voxel_fragment_staging_buffer, m_debug_buffer;
 
     std::shared_ptr<myvk::DescriptorPool> m_descriptor_pool;
     std::shared_ptr<myvk::DescriptorSetLayout> m_descriptor_set_layout;
@@ -77,7 +77,7 @@ public:
     uint32_t GetVoxelResolution() const { return m_voxel_resolution; }
     uint32_t GetVoxelFragmentCount() const { return m_num_terminals * estimate_fragment_count(); }
     const std::shared_ptr<myvk::Buffer> &GetVoxelFragmentList() const { return m_voxel_fragment_buffer; }
-    void CmdGenerate(std::shared_ptr<myvk::CommandBuffer> &command_buffer);
+    void CmdGenerate(const std::shared_ptr<myvk::CommandBuffer> &command_buffer);
     void DumpBuffer();
 };
 

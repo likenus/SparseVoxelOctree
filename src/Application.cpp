@@ -363,14 +363,12 @@ Application::Application() {
 	m_camera->m_position = glm::vec3(1.5, 1.5, 2.5);
 	m_octree = Octree::Create(m_device);
 
-	uint32_t octree_level = 7;
+	uint32_t octree_level = 11;
 
 	m_voxel_generator = VoxelGenerator::Create(m_device, m_main_command_pool, "F[+F]F[-F]F", octree_level);
 	m_octree_builder_2 = OctreeBuilder2::Create(m_voxel_generator, m_main_command_pool);
 
 	generate();
-
-	m_voxel_generator->DumpBuffer();
 
 	m_octree_tracer = OctreeTracer::Create(m_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
 	m_path_tracer = PathTracer::Create(m_octree, m_camera, m_lighting, m_path_tracer_command_pool);

@@ -89,6 +89,7 @@ add_executable(SparseVoxelOctree
         src/OctreeBuilder2.cpp
         src/OctreeBuilder2.hpp
         src/Quaternion.hpp
+        src/Timer.hpp
 )
 
 find_package(Threads REQUIRED)

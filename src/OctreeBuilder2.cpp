@@ -8,20 +8,30 @@
 
 #include <spdlog/spdlog.h>
 
+#include "Timer.hpp"
+
 inline static constexpr uint32_t group_x_64(uint32_t x) { return (x >> 6u) + ((x & 0x3fu) ? 1u : 0u); }
 
 std::shared_ptr<OctreeBuilder2> OctreeBuilder2::Create(const std::shared_ptr<VoxelGenerator> &generator,
-                                                     const std::shared_ptr<myvk::CommandPool> &command_pool) {
+                                                     const std::shared_ptr<myvk::CommandPool> &command_pool,
+                                                     const std::shared_ptr<Timer> &timer) {
 	std::shared_ptr<OctreeBuilder2> ret = std::make_shared<OctreeBuilder2>();
 
 	std::shared_ptr<myvk::Device> device = command_pool->GetDevicePtr();
 	ret->m_voxel_generator_ptr = generator;
 	ret->m_atomic_counter.Initialize(device);
 	ret->m_atomic_counter.Reset(command_pool, 0);
+	ret->m_device = device;
+	ret->m_command_buffer = myvk::CommandBuffer::Create(command_pool);
+	ret->m_fence = myvk::Fence::Create(device);
+	ret->m_timer = timer;
+
+	ret->generate_fragments();
 
 	ret->create_buffers(device);
 	ret->create_descriptors(device);
 	ret->create_pipeline(device);
+
 
 	return ret;
 }
@@ -42,6 +52,9 @@ void OctreeBuilder2::create_buffers(const std::shared_ptr<myvk::Device> &device)
 		data[1] = 1; // uGroupY
 		data[2] = 1; // uGroupZ
 	});
+
+	m_voxel_fragment_buffer = myvk::Buffer::Create(device, 2 * sizeof(uint32_t) * m_voxel_fragments.size(), 0,
+											VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 	// Estimate octree buffer size
 	uint32_t octree_node_ratio = m_voxel_generator_ptr->GetLevel() / 1;
@@ -95,7 +108,7 @@ void OctreeBuilder2::create_descriptors(const std::shared_ptr<myvk::Device> &dev
 	m_descriptor_set = myvk::DescriptorSet::Create(m_descriptor_pool, m_descriptor_set_layout);
 	m_descriptor_set->UpdateStorageBuffer(m_atomic_counter.GetBuffer(), 0);
 	m_descriptor_set->UpdateStorageBuffer(m_octree_buffer, 1);
-	m_descriptor_set->UpdateStorageBuffer(m_voxel_generator_ptr->GetVoxelFragmentList(), 2);
+	m_descriptor_set->UpdateStorageBuffer(m_voxel_fragment_buffer, 2);
 	m_descriptor_set->UpdateStorageBuffer(m_build_info_buffer, 3);
 	m_descriptor_set->UpdateStorageBuffer(m_indirect_buffer, 4);
 }
@@ -222,4 +235,28 @@ void OctreeBuilder2::CmdTransferOctreeOwnership(const std::shared_ptr<myvk::Comm
                                                VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage) const {
 	command_buffer->CmdPipelineBarrier(
 	    src_stage, dst_stage, {}, {m_octree_buffer->GetMemoryBarrier(0, 0, src_queue_family, dst_queue_family)}, {});
+}
+
+void OctreeBuilder2::generate_fragments() {
+	m_timer->new_lap();
+	glm::uvec2 fragment;
+
+	while (!m_voxel_generator_ptr->is_done) {
+		m_voxel_generator_ptr->DoStep(fragment);
+		m_voxel_fragments.push_back(fragment);
+	}
+	m_timer->lap("generating fragments");
+}
+
+void OctreeBuilder2::Build() {
+
+	auto voxel_fragment_staging_buffer = myvk::Buffer::CreateStaging(m_device, m_voxel_fragments.begin(), m_voxel_fragments.end());
+	m_command_buffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	m_command_buffer->CmdCopy(voxel_fragment_staging_buffer, m_voxel_fragment_buffer, {{0, 0, voxel_fragment_staging_buffer->GetSize()}});
+	CmdBuild(m_command_buffer);
+
+	m_command_buffer->End();
+	m_command_buffer->Submit(m_fence);
+	m_fence->Wait();
 }

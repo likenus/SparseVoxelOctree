@@ -44,6 +44,7 @@
 #include "myvk/Surface.hpp"
 #include "myvk/Swapchain.hpp"
 #include "myvk/SwapchainImage.hpp"
+#include "OctreeBuilder3.hpp"
 
 class Application {
 private:
@@ -69,8 +70,9 @@ private:
 	// global resources
 	std::shared_ptr<Camera> m_camera;
 	std::shared_ptr<Octree> m_octree;
-	std::shared_ptr<VoxelGenerator> m_voxel_generator;
+	std::shared_ptr<VoxelGenerator> m_voxel_generator, m_voxel_generator2;
 	std::shared_ptr<OctreeBuilder2> m_octree_builder_2;
+    std::shared_ptr<OctreeBuilder3> m_octree_builder_3;
 	std::shared_ptr<OctreeTracer> m_octree_tracer;
 	// std::shared_ptr<DynamicOctree> m_dynamic_octree;
 	// std::shared_ptr<DynamicOctreeTracer> m_dynamic_octree_tracer;
@@ -96,7 +98,8 @@ private:
 	void resize();
 	void draw_frame();
 	void generate_and_draw();
-	void generate();
+	void generate_on_the_fly(const std::shared_ptr<Timer> &timer);
+	void generate_top_down(const std::shared_ptr<Timer> &timer);
 
 	void ui_switch_state();
 	void ui_render_main();

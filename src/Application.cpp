@@ -12,6 +12,7 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_internal.h>
+#include <iostream>
 
 #include "ImGuiUtil.hpp"
 #include "UICamera.hpp"
@@ -20,6 +21,7 @@
 #include "UILog.hpp"
 #include "UIOctreeTracer.hpp"
 #include "UIPathTracer.hpp"
+#include "Timer.hpp"
 
 #ifndef NDEBUG
 
@@ -329,7 +331,7 @@ void Application::initialize_vulkan() {
 		}
 	}
 
-	m_main_command_pool = myvk::CommandPool::Create(m_main_queue);
+	m_main_command_pool = myvk::CommandPool::Create(m_main_queue, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 	m_path_tracer_command_pool = myvk::CommandPool::Create(m_path_tracer_queue);
 }
 
@@ -363,19 +365,30 @@ Application::Application() {
 	m_camera->m_position = glm::vec3(1.5, 1.5, 2.5);
 	m_octree = Octree::Create(m_device);
 
-	uint32_t octree_level = 11;
+	uint32_t octree_level = 13;
+	string axiom = "F[+F]F[-F]F";
 
-	m_voxel_generator = VoxelGenerator::Create(m_device, m_main_command_pool, "F[+F]F[-F]F", octree_level);
-	m_octree_builder_2 = OctreeBuilder2::Create(m_voxel_generator, m_main_command_pool);
+	auto top_down_timer = Timer::start();
+	m_voxel_generator = VoxelGenerator::Create(m_device, top_down_timer, axiom, octree_level);
+	m_octree_builder_2 = OctreeBuilder2::Create(m_voxel_generator, m_main_command_pool, top_down_timer);
 
-	generate();
+	auto on_the_fly_timer = Timer::start();
+	m_voxel_generator2 = VoxelGenerator::Create(m_device, on_the_fly_timer, axiom, octree_level);
+    m_octree_builder_3 = OctreeBuilder3::Create(m_voxel_generator2, m_main_command_pool, on_the_fly_timer);
+
+	generate_on_the_fly(on_the_fly_timer); // 337
+	generate_top_down(top_down_timer); // 513
+
+	on_the_fly_timer->log("On the fly construction");
+	std::cout << "---------------" << std::endl;
+	top_down_timer->log("Post process construction");
+
+	m_octree->Update(m_main_command_pool, m_octree_builder_3);
+
 
 	m_octree_tracer = OctreeTracer::Create(m_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
 	m_path_tracer = PathTracer::Create(m_octree, m_camera, m_lighting, m_path_tracer_command_pool);
 	m_path_tracer_viewer = PathTracerViewer::Create(m_path_tracer, m_render_pass, 0);
-
-	// m_dynamic_octree = DynamicOctree::Create(m_device, m_main_queue);
-	// m_dynamic_octree_tracer = DynamicOctreeTracer::Create(m_dynamic_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
 
 	m_loader_thread = LoaderThread::Create(m_octree, m_loader_queue, m_main_queue);
 	m_path_tracer_thread = PathTracerThread::Create(m_path_tracer_viewer, m_path_tracer_queue, m_main_queue);
@@ -417,7 +430,7 @@ void Application::Run() {
 		ImGui::Render();
 
 		draw_frame();
-		// generate_and_draw();
+
 		lst_time = cur_time;
 	}
 }
@@ -505,27 +518,16 @@ void Application::glfw_framebuffer_resize_callback(GLFWwindow *window, int width
 	app->m_frame_manager->Resize();
 }
 
-void Application::generate() {
-	spdlog::info("Begin generating");
-	auto command_buffer = myvk::CommandBuffer::Create(m_main_command_pool);
+void Application::generate_on_the_fly(const std::shared_ptr<Timer> &timer) {
 
-	auto fence = myvk::Fence::Create(m_device);
+	timer->new_lap();
+    m_octree_builder_3->Build();
+	timer->lap("Finish on the fly octree");
+}
 
-	auto start = std::chrono::high_resolution_clock::now();
+void Application::generate_top_down(const std::shared_ptr<Timer> &timer) {
 
-	command_buffer->Begin();
-	m_voxel_generator->CmdGenerate(command_buffer);
-	m_octree_builder_2->CmdBuild(command_buffer);
-	command_buffer->End();
-
-	command_buffer->Submit(fence);
-
-	fence->Wait();
-
-	m_octree->Update(m_main_command_pool, m_octree_builder_2);
-
-	auto end = std::chrono::high_resolution_clock::now();
-
-	spdlog::info("Finished building octree. Took {} ms.",
-		std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+	timer->new_lap();
+	m_octree_builder_2->Build();
+	timer->lap("Finish top down octree");
 }

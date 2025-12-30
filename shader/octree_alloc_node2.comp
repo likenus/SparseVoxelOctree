@@ -1,0 +1,29 @@
+#version 450
+#extension GL_KHR_shader_subgroup_ballot : enable
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std140, binding = 0) buffer uuCounter { uint uCounter; };
+layout(std430, binding = 1) buffer uuOctree { uint uOctree[]; };
+layout(std140, binding = 3) readonly buffer uuBuildInfo { uint uAllocBegin, uAllocNum, uBatchSize; };
+layout(binding = 5) buffer uuTagAlloc { uint uTagAlloc[]; };
+
+void main() {
+	if (gl_GlobalInvocationID.x >= uBatchSize)
+		return;
+	uint idx = gl_GlobalInvocationID.x;
+	uint addr = uTagAlloc[idx];
+
+	if (addr == 0 && !subgroupElect()) return;
+
+	uvec4 ballot = subgroupBallot(addr != 0);
+	uint cur_base;
+	if (subgroupElect())
+		cur_base = atomicAdd(uCounter, subgroupBallotBitCount(ballot));
+	cur_base = subgroupBroadcastFirst(cur_base);
+	uint cur = cur_base + subgroupBallotExclusiveBitCount(ballot);
+
+	uOctree[addr] = ((cur + 1u) << 3u) | 0x80000000u;
+
+	// Reset buffer
+	uTagAlloc[idx] = 0u;
+}

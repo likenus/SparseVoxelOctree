@@ -1,14 +1,24 @@
 #version 450
+
+#define ALLOCATOR_SET 1
+#include "stack_allocator.glsl"
+
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 layout(constant_id = 0) const uint kVoxelResolution = 1;
-layout(constant_id = 1) const uint kFragmentCount = 1;
+layout(constant_id = 1) const uint kFragmentCount = 1; // same as BATCH_SIZE
 
-layout(std430, binding = 1) buffer uuOctree { uint uOctree[]; };
-layout(std430, binding = 2) readonly buffer uuFragmentList { uvec2 uFragmentList[]; };
-layout(binding = 5) buffer uuTagAlloc { uint uTagAlloc[]; };
+layout(std140, set = 0, binding = 0) buffer uuCounter { uint uCounter; };
+layout(std430, set = 0, binding = 1) buffer uuOctree { uint uOctree[]; };
+layout(std430, set = 0, binding = 2) readonly buffer uuFragmentList { uvec2 uFragmentList[]; };
 
-#define POINTER_MASK 0x3fffffffu;
+// uLevelDim = 1 << current octree level, uOctreeLevel = level of entire octree
+layout(std140, set = 0, binding = 3) readonly buffer uuBuildInfo { uint uAllocBegin, uAllocNum, uBatchSize, uLevelDim, uOctreeLevel; };
+layout(std430, set = 0, binding = 5) buffer uuTagAlloc { uvec4 uTagAlloc[]; };
+
+#define POINTER_MASK 0x3fffffffu
+#define TAG_MASK 0x80000000u
+#define LOCK_VAL 1
 
 uvec4 LeafToUvec4(uint val) {
 	return uvec4((val & 0xffu), ((val >> 8u) & 0xffu), ((val >> 16u) & 0xffu), ((val >> 24u) & 0x3fu));
@@ -18,18 +28,37 @@ uint Uvec4ToLeaf(uvec4 vec) {
 	       0xC0000000u;
 }
 
-uint TraverseOctree(in const uvec3 voxel_pos, out bool is_leaf) {
+uint TraverseOctree(in const uvec3 voxel_pos) {
 	uint level_dim = kVoxelResolution;
 	uvec3 level_pos = voxel_pos;
 
 	uint idx = 0u, cur = 0u;
 	do {
-		bvec3 cmp = greaterThanEqual(level_pos, uvec3(level_dim >>= 1));
+		level_dim >>= 1;
+		bvec3 cmp = greaterThanEqual(level_pos, uvec3(level_dim));
 		idx = cur | uint(cmp.x) | (uint(cmp.y) << 1u) | (uint(cmp.z) << 2u);
-		cur = uOctree[idx] & POINTER_MASK; // read node pointer
 		level_pos -= uvec3(cmp) * level_dim;
-	} while (cur != 0 && level_dim > 1u);
-	is_leaf = level_dim == 1u;
+
+		uint lock_available;
+		do {
+			lock_available = atomicCompSwap(uOctree[idx], 0, 1);
+
+			if (lock_available == 0) { // node ptr was null, acquired lock
+
+				// allocate new address
+				uint addr = MyAlloc();
+
+				// Release lock
+				atomicExchange(uOctree[idx], addr | TAG_MASK);
+			}
+		} while ((lock_available & TAG_MASK) == 0);
+
+		cur = uOctree[idx] & POINTER_MASK;
+
+	} while (level_dim > 2u);
+		level_dim >>= 1;
+		bvec3 cmp = greaterThanEqual(level_pos, uvec3(level_dim));
+		idx = cur | uint(cmp.x) | (uint(cmp.y) << 1u) | (uint(cmp.z) << 2u);
 	return idx;
 }
 
@@ -43,26 +72,20 @@ void main() {
 
 	if (voxel_pos == uvec3(0)) return;
 
-	bool is_leaf;
-	uint idx = TraverseOctree(voxel_pos, is_leaf);
+	uint idx = TraverseOctree(voxel_pos);
 
-	if (is_leaf) {
-		// uOctree[idx] = 0xC0000000u | (ufragment.y & 0xffffffu); // termination
-		// tag and color data
+	// uOctree[idx] = 0xC0000000u | (ufragment.y & 0xffffffu); // termination
+	// tag and color data
 
-		// atomic moving average
-		uint prev_val = 0, cur_val, new_val = 0xC1000000u | (ufragment.y & 0xffffffu);
-		uvec4 rgba = LeafToUvec4(new_val);
-		while ((cur_val = atomicCompSwap(uOctree[idx], prev_val, new_val)) != prev_val) {
-			prev_val = cur_val;
-			uvec4 prev_rgba = LeafToUvec4(prev_val);
-			prev_rgba.xyz *= prev_rgba.w;
-			uvec4 cur_rgba = prev_rgba + rgba;
-			cur_rgba.xyz /= cur_rgba.w;
-			new_val = Uvec4ToLeaf(cur_rgba);
-		}
-	} else {
-		uTagAlloc[gl_GlobalInvocationID.x] = idx;
-		//uOctree[idx] = 0x80000000u; // Technically not necessary
+	// atomic moving average
+	uint prev_val = 0, cur_val, new_val = 0xC1000000u | (ufragment.y & 0xffffffu);
+	uvec4 rgba = LeafToUvec4(new_val);
+	while ((cur_val = atomicCompSwap(uOctree[idx], prev_val, new_val)) != prev_val) {
+		prev_val = cur_val;
+		uvec4 prev_rgba = LeafToUvec4(prev_val);
+		prev_rgba.xyz *= prev_rgba.w;
+		uvec4 cur_rgba = prev_rgba + rgba;
+		cur_rgba.xyz /= cur_rgba.w;
+		new_val = Uvec4ToLeaf(cur_rgba);
 	}
 }

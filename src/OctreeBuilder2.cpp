@@ -63,7 +63,8 @@ void OctreeBuilder2::create_buffers(const std::shared_ptr<myvk::Device> &device)
 	octree_entry_num = std::min(octree_entry_num, kOctreeNodeNumMax);
 
 	m_octree_buffer =
-	    myvk::Buffer::Create(device, octree_entry_num * sizeof(uint32_t), 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		myvk::Buffer::Create(device, octree_entry_num * sizeof(uint32_t), 0,
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	spdlog::info("Octree buffer created with {} nodes ({} MB)", octree_entry_num,
 	             m_octree_buffer->GetSize() / 1000000.0);
 }
@@ -228,7 +229,7 @@ void OctreeBuilder2::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &comman
 }
 
 VkDeviceSize OctreeBuilder2::GetOctreeRange(const std::shared_ptr<myvk::CommandPool> &command_pool) const {
-	return m_voxel_generator_ptr->GetVoxelFragmentCount() * 8u * sizeof(uint32_t);
+	return (m_atomic_counter.Read(command_pool) + 1u) * 8u * sizeof(uint32_t);
 }
 void OctreeBuilder2::CmdTransferOctreeOwnership(const std::shared_ptr<myvk::CommandBuffer> &command_buffer,
                                                uint32_t src_queue_family, uint32_t dst_queue_family,
@@ -259,4 +260,23 @@ void OctreeBuilder2::Build() {
 	m_command_buffer->End();
 	m_command_buffer->Submit(m_fence);
 	m_fence->Wait();
+}
+
+void OctreeBuilder2::DumpBuffer(const std::shared_ptr<myvk::CommandPool> &command_pool) {
+	uint32_t *buffer_content = static_cast<uint32_t *>(m_octree_buffer->GetMappedData());
+
+	uint32_t range = GetOctreeRange(command_pool) / sizeof(uint32_t);
+	spdlog::info("Dumping buffer. {} entries", range);
+	for (int i = 0; i < range; i++) {
+		uint32_t cur = buffer_content[i];
+		std::cout << i << ": ";
+		if (cur & 0x40000000u) {
+			std::cout << "Leaf" << std::endl;
+		} else if (cur & 0x80000000u) {
+			std::cout << ((cur & 0x3fffffff)) << std::endl;
+		}
+		else {
+			std::cout << cur << std::endl;
+		}
+	}
 }

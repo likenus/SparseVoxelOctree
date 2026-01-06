@@ -6,6 +6,7 @@
 #define SPARSEVOXELOCTREE_OCTREEBUILDER3_HPP
 
 #include "Counter.hpp"
+#include "StackAllocator.hpp"
 #include "VoxelGenerator.h"
 
 #include "myvk/Buffer.hpp"
@@ -20,7 +21,7 @@
  * 16.384       552 ms
  * 32.768       593 ms
 */
-const uint32_t BATCH_SIZE = 1 << 14;
+const uint32_t BATCH_SIZE = 1 << 13;
 const uint32_t SWAP_COUNT = 2;
 
 using namespace std;
@@ -33,7 +34,7 @@ private:
     shared_ptr<myvk::Device> m_device;
     std::shared_ptr<myvk::PipelineLayout> m_pipeline_layout;
     std::shared_ptr<myvk::ComputePipeline> m_tag_node_pipeline, m_init_node_pipeline, m_alloc_node_pipeline,
-            m_modify_arg_pipeline;
+            m_modify_arg_pipeline, m_reset_buffer_pipeline;
 
     Counter m_atomic_counter;
 
@@ -49,6 +50,8 @@ private:
     shared_ptr<myvk::CommandBuffer> m_command_buffer;
     vector<shared_ptr<myvk::Buffer>> m_swap_voxel_fragment_staging_buffer = vector<shared_ptr<myvk::Buffer>>(SWAP_COUNT);
     shared_ptr<myvk::Fence> m_fence;
+
+    shared_ptr<StackAllocator> m_stack_allocator;
 
     void create_buffers(const std::shared_ptr<myvk::Device> &device);
     void create_descriptors(const std::shared_ptr<myvk::Device> &device);
@@ -71,6 +74,8 @@ public:
                                     uint32_t src_queue_family, uint32_t dst_queue_family,
                                     VkPipelineStageFlags src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                     VkPipelineStageFlags dst_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) const;
+
+    void DumpBuffer(const std::shared_ptr<myvk::CommandPool> &command_pool);
 };
 
 

@@ -5,6 +5,7 @@
 #ifndef SPARSEVOXELOCTREE_TIMER_HPP
 #define SPARSEVOXELOCTREE_TIMER_HPP
 #include <chrono>
+#include <iostream>
 #include <ranges>
 
 #include "spdlog/spdlog.h"
@@ -42,8 +43,9 @@ public:
     }
 
     void log(const std::string &title = "") {
+        std::cout << std::endl;
         spdlog::info(title);
-        for (auto [description, duration] : laps) {
+        for (auto &[description, duration] : laps) {
             spdlog::info("{} | {} ms", description, duration_cast<milliseconds>(duration).count());
         }
         spdlog::info("Total: {} ms", this->total());

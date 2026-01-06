@@ -4,26 +4,35 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 layout(std140, binding = 0) buffer uuCounter { uint uCounter; };
 layout(std430, binding = 1) buffer uuOctree { uint uOctree[]; };
-layout(std140, binding = 3) readonly buffer uuBuildInfo { uint uAllocBegin, uAllocNum, uBatchSize; };
-layout(binding = 5) buffer uuTagAlloc { uint uTagAlloc[]; };
+layout(std140, binding = 3) readonly buffer uuBuildInfo { uint uAllocBegin, uAllocNum, uBatchSize, uLevelDim, uOctreeLevel; };
+layout(std430, binding = 5) buffer uuTagAlloc { uvec4 uTagAlloc[]; };
+
+#define POINTER_MASK 0x3fffffffu
+#define TAG_MASK 0x80000000u
+
 
 void main() {
 	if (gl_GlobalInvocationID.x >= uBatchSize)
 		return;
 	uint idx = gl_GlobalInvocationID.x;
-	uint addr = uTagAlloc[idx];
+	uint addr = uTagAlloc[idx].w;
 
-	if (addr == 0 && !subgroupElect()) return;
+	// addr is either tag and 0 or a valid address
+	//if ((addr & TAG_MASK) == 0 && !subgroupElect()) return;
 
-	uvec4 ballot = subgroupBallot(addr != 0);
+	// use atomic counter to allocate memory regions
+	uvec4 ballot = subgroupBallot((addr & TAG_MASK) != 0);
 	uint cur_base;
 	if (subgroupElect())
 		cur_base = atomicAdd(uCounter, subgroupBallotBitCount(ballot));
 	cur_base = subgroupBroadcastFirst(cur_base);
 	uint cur = cur_base + subgroupBallotExclusiveBitCount(ballot);
 
-	uOctree[addr] = ((cur + 1u) << 3u) | 0x80000000u;
+	if ((addr & TAG_MASK) == 0) return;
 
-	// Reset buffer
-	uTagAlloc[idx] = 0u;
+	// Set pointer for node
+	uOctree[addr] = ((cur + 1u) << 3u) | TAG_MASK;
+
+	// Put address of new node in buffer
+	uTagAlloc[idx].w = ((cur + 1u) << 3u);
 }

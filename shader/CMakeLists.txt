@@ -37,6 +37,7 @@ set(SHADER_SRC
 		octree_init_node2.comp
 		octree_alloc_node2.comp
 		octree_modify_arg2.comp
+		octree_reset_buffer.comp
 
 		octree_tracer.frag
 		octree_tracer_beam.frag

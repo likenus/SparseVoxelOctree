@@ -1,0 +1,19 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// uLevelDim = 1 << current octree level, uOctreeLevel = level of entire octree
+layout(std140, binding = 3) buffer uuBuildInfo { uint uAllocBegin, uAllocNum, uBatchSize, uLevelDim, uOctreeLevel; };
+layout(binding = 5) writeonly buffer uuTagAlloc { uvec4 uTagAlloc[]; };
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= uBatchSize) return;
+
+    uvec4 entry = uvec4(0);
+    uTagAlloc[idx] = entry;
+
+    if (idx == 0) {
+        uLevelDim = 1u << (uOctreeLevel - 1);
+    }
+}

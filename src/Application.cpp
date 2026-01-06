@@ -365,23 +365,33 @@ Application::Application() {
 	m_camera->m_position = glm::vec3(1.5, 1.5, 2.5);
 	m_octree = Octree::Create(m_device);
 
-	uint32_t octree_level = 13;
-	string axiom = "F[+F]F[-F]F";
+	uint32_t octree_level = 12;
+	uint32_t depth = 10;
+	float delta = 22.5f;
+
+	auto ls = LSystem::Create("X");
+	ls->addRule('F', "FF");
+	ls->addRule('X', "F[+X]F[-X]+X");
+
+
 
 	auto top_down_timer = Timer::start();
-	m_voxel_generator = VoxelGenerator::Create(m_device, top_down_timer, axiom, octree_level);
+	m_voxel_generator = VoxelGenerator::Create(top_down_timer, ls, octree_level, depth, delta);
 	m_octree_builder_2 = OctreeBuilder2::Create(m_voxel_generator, m_main_command_pool, top_down_timer);
 
 	auto on_the_fly_timer = Timer::start();
-	m_voxel_generator2 = VoxelGenerator::Create(m_device, on_the_fly_timer, axiom, octree_level);
+	m_voxel_generator2 = VoxelGenerator::Create(on_the_fly_timer, ls, octree_level, depth, delta);
     m_octree_builder_3 = OctreeBuilder3::Create(m_voxel_generator2, m_main_command_pool, on_the_fly_timer);
 
 	generate_on_the_fly(on_the_fly_timer); // 337
 	generate_top_down(top_down_timer); // 513
 
-	on_the_fly_timer->log("On the fly construction");
-	std::cout << "---------------" << std::endl;
 	top_down_timer->log("Post process construction");
+	std::cout << "---------------" << std::endl;
+	on_the_fly_timer->log("On the fly construction");
+
+	//m_octree_builder_2->DumpBuffer(m_main_command_pool);
+	//m_octree_builder_3->DumpBuffer(m_main_command_pool);
 
 	m_octree->Update(m_main_command_pool, m_octree_builder_3);
 

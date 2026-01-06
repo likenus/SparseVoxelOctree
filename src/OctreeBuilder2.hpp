@@ -60,6 +60,7 @@ public:
 	                                VkPipelineStageFlags src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 	                                VkPipelineStageFlags dst_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT) const;
 	void Build();
+	void DumpBuffer(const std::shared_ptr<myvk::CommandPool> &command_pool);
 };
 
 

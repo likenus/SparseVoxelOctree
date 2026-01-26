@@ -6,29 +6,26 @@
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 layout(constant_id = 0) const uint kVoxelResolution = 1;
-layout(constant_id = 1) const uint kFragmentCount = 1; // same as BATCH_SIZE
+layout(constant_id = 1) const uint kBatchSize = 1;
 
-layout(std140, set = 0, binding = 0) buffer uuCounter { uint uCounter; };
 layout(std430, set = 0, binding = 1) buffer uuOctree { uint uOctree[]; };
-layout(std430, set = 0, binding = 2) readonly buffer uuFragmentList { uvec2 uFragmentList[]; };
+layout(std430, set = 0, binding = 2) readonly buffer uuFragmentList { uvec4 uFragmentList[]; };
 
-// uLevelDim = 1 << current octree level, uOctreeLevel = level of entire octree
-layout(std140, set = 0, binding = 3) readonly buffer uuBuildInfo { uint uAllocBegin, uAllocNum, uBatchSize, uLevelDim, uOctreeLevel; };
-layout(std430, set = 0, binding = 5) buffer uuTagAlloc { uvec4 uTagAlloc[]; };
 
 #define POINTER_MASK 0x3fffffffu
 #define TAG_MASK 0x80000000u
+#define LEAF_MASK 0x40000000u
 #define LOCK_VAL 1
 
 uvec4 LeafToUvec4(uint val) {
-	return uvec4((val & 0xffu), ((val >> 8u) & 0xffu), ((val >> 16u) & 0xffu), ((val >> 24u) & 0x3fu));
+	return uvec4(((val >> 16u) & 0xffu), ((val >> 8u) & 0xffu), (val & 0xffu), ((val >> 24u) & 0x3fu));
 }
 uint Uvec4ToLeaf(uvec4 vec) {
 	return (min(vec.w, 0x3fu) << 24u) | (vec.x & 0xffu) | ((vec.y & 0xffu) << 8u) | ((vec.z & 0xffu) << 16u) |
 	       0xC0000000u;
 }
 
-uint TraverseOctree(in const uvec3 voxel_pos) {
+uint TraverseOctree(in const uvec3 voxel_pos, in const uint voxel_size) {
 	uint level_dim = kVoxelResolution;
 	uvec3 level_pos = voxel_pos;
 
@@ -38,6 +35,8 @@ uint TraverseOctree(in const uvec3 voxel_pos) {
 		bvec3 cmp = greaterThanEqual(level_pos, uvec3(level_dim));
 		idx = cur | uint(cmp.x) | (uint(cmp.y) << 1u) | (uint(cmp.z) << 2u);
 		level_pos -= uvec3(cmp) * level_dim;
+
+		if (level_dim <= 2) break;
 
 		uint lock_available;
 		do {
@@ -51,34 +50,37 @@ uint TraverseOctree(in const uvec3 voxel_pos) {
 				// Release lock
 				atomicExchange(uOctree[idx], addr | TAG_MASK);
 			}
+			if ((lock_available & LEAF_MASK) > 0) return idx;
 		} while ((lock_available & TAG_MASK) == 0);
 
 		cur = uOctree[idx] & POINTER_MASK;
 
-	} while (level_dim > 2u);
-		level_dim >>= 1;
-		bvec3 cmp = greaterThanEqual(level_pos, uvec3(level_dim));
-		idx = cur | uint(cmp.x) | (uint(cmp.y) << 1u) | (uint(cmp.z) << 2u);
+	} while (level_dim > 1u && level_dim > voxel_size);
+
 	return idx;
 }
 
 void main() {
-	if (gl_GlobalInvocationID.x >= kFragmentCount)
+	if (gl_GlobalInvocationID.x >= kBatchSize)
 		return;
-	uvec2 ufragment = uvec2(uFragmentList[gl_GlobalInvocationID.x]);
+	uvec4 ufragment = uvec4(uFragmentList[gl_GlobalInvocationID.x]);
 
-	uvec3 voxel_pos =
-	    uvec3(ufragment.x & 0xfffu, (ufragment.x >> 12u) & 0xfffu, (ufragment.x >> 24u) | ((ufragment.y >> 28u) << 8u));
+	if (ufragment == uvec4(0)) return;
 
-	if (voxel_pos == uvec3(0)) return;
+	//uvec3 voxel_pos =
+	//    uvec3(ufragment.x & 0xfffu, (ufragment.x >> 12u) & 0xfffu, (ufragment.x >> 24u) | ((ufragment.y >> 28u) << 8u));
+	uvec3 voxel_pos = ufragment.xyz;
+	uint voxel_size = 1u << (ufragment.w >> 24);
 
-	uint idx = TraverseOctree(voxel_pos);
+	uint idx = TraverseOctree(voxel_pos, voxel_size);
+
+	if ((uOctree[idx] & LEAF_MASK) > 0) return;
 
 	// uOctree[idx] = 0xC0000000u | (ufragment.y & 0xffffffu); // termination
 	// tag and color data
 
 	// atomic moving average
-	uint prev_val = 0, cur_val, new_val = 0xC1000000u | (ufragment.y & 0xffffffu);
+	uint prev_val = 0, cur_val, new_val = 0xC1000000u | (ufragment.w & 0x00ffffff);
 	uvec4 rgba = LeafToUvec4(new_val);
 	while ((cur_val = atomicCompSwap(uOctree[idx], prev_val, new_val)) != prev_val) {
 		prev_val = cur_val;

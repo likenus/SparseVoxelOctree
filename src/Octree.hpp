@@ -6,6 +6,7 @@
 #include "myvk/Buffer.hpp"
 #include "myvk/DescriptorSet.hpp"
 #include "OctreeBuilder3.hpp"
+#include "OctreeBuilder4.hpp"
 
 class Octree {
 private:
@@ -22,6 +23,7 @@ public:
 	void Update(const std::shared_ptr<myvk::CommandPool> &command_pool, const std::shared_ptr<OctreeBuilder> &builder);
 	void Update(const std::shared_ptr<myvk::CommandPool> &command_pool, const std::shared_ptr<OctreeBuilder2> &builder);
     void Update(const std::shared_ptr<myvk::CommandPool> &command_pool, const std::shared_ptr<OctreeBuilder3> &builder);
+	void Update(const std::shared_ptr<myvk::CommandPool> &command_pool, const std::shared_ptr<OctreeBuilder4> &builder);
 	bool Empty() const { return m_buffer == nullptr; }
 
 	const std::shared_ptr<myvk::Buffer> &GetBuffer() const { return m_buffer; }

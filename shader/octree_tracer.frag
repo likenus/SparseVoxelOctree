@@ -19,6 +19,22 @@ layout(push_constant) uniform uuPushConstant {
 
 vec3 Heat(in float x) { return sin(clamp(x, 0.0, 1.0) * 3.0 - vec3(1, 2, 3)) * 0.5 + 0.5; }
 
+bool IntersectFloor(vec3 o, vec3 d, out vec3 pos, out vec3 color, out vec3 normal) {
+	float t = (1.f -o.y) / d.y;
+
+	if (t > 0) {
+		pos = o + t * d;
+
+		bvec2 cmp = greaterThanEqual(mod(pos.xz, vec2(.5)), vec2(.25));
+		bool tex = bool(uint(cmp.x) ^ uint(cmp.y));
+		color = tex ? vec3(.5f, .5f, 1.f) : vec3(0.75f, 0.75f, 1.f);
+		normal = vec3(0, 1, 0);
+		return true;
+	}
+
+	return false;
+}
+
 vec3 Light(in vec3 d) {
 	return uLightType == 0 ? vec3(uConstColor[0], uConstColor[1], uConstColor[2]) : EnvMap_Radiance(d, uEnvMapRotation);
 }
@@ -38,17 +54,23 @@ void main() {
 	vec3 pos, color, normal;
 	uint iter, depth;
 	bool hit = Octree_RayMarchLeaf(o, d, pos, color, normal, iter, depth);
+
+	if (!hit) {
+		hit = IntersectFloor(o, d, pos, color, normal);
+	}
+
 	if (!hit) {
 		pos = vec3(1.0);
 		normal = vec3(0.0);
-		color = Light(d);
+			color = Light(d);
 	} else { // cast shadow
 		vec3 l = normalize(vec3(2.f, 1.f, 1.f));
 		o = pos + l * EPS;
 		vec3 _pos, _col, _normal;
 		uint _iter, _depth;
 		if (Octree_RayMarchLeaf(o, l, _pos, _col, _normal, _iter, _depth)) {
-			color *= (0.75f + .25f * dot(l, -d));
+			//color *= (0.75f + .25f * dot(l, -d));
+			color *= .75f;
 		}
 	}
 

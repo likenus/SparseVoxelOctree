@@ -45,6 +45,7 @@
 #include "myvk/Swapchain.hpp"
 #include "myvk/SwapchainImage.hpp"
 #include "OctreeBuilder3.hpp"
+#include "OctreeBuilder4.hpp"
 
 class Application {
 private:
@@ -71,11 +72,10 @@ private:
 	std::shared_ptr<Camera> m_camera;
 	std::shared_ptr<Octree> m_octree;
 	std::shared_ptr<VoxelGenerator> m_voxel_generator, m_voxel_generator2;
-	std::shared_ptr<OctreeBuilder2> m_octree_builder_2;
-    std::shared_ptr<OctreeBuilder3> m_octree_builder_3;
+	std::shared_ptr<OctreeBuilder2> m_top_down_octree_builder;
+    std::shared_ptr<OctreeBuilder3> m_on_the_fly_octree_builder;
+	std::shared_ptr<OctreeBuilder4> m_noise_builder;
 	std::shared_ptr<OctreeTracer> m_octree_tracer;
-	// std::shared_ptr<DynamicOctree> m_dynamic_octree;
-	// std::shared_ptr<DynamicOctreeTracer> m_dynamic_octree_tracer;
 	std::shared_ptr<PathTracer> m_path_tracer;
 	std::shared_ptr<PathTracerViewer> m_path_tracer_viewer;
 	std::shared_ptr<EnvironmentMap> m_environment_map;
@@ -100,10 +100,12 @@ private:
 	void generate_and_draw();
 	void generate_on_the_fly(const std::shared_ptr<Timer> &timer);
 	void generate_top_down(const std::shared_ptr<Timer> &timer);
+	void generate_noise_on_the_fly(const std::shared_ptr<Timer> &timer) const;
 
 	void ui_switch_state();
 	void ui_render_main();
 	void ui_menubar();
+
 
 	static void glfw_key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 	static void glfw_framebuffer_resize_callback(GLFWwindow *window, int width, int height);
@@ -113,6 +115,7 @@ public:
 	~Application();
 	void Load(const char *filename, uint32_t octree_level);
 	void Run();
+	void Benchmark() const;
 };
 
 #endif

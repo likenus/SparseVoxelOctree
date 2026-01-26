@@ -3,7 +3,7 @@
 
 #include <spdlog/spdlog.h>
 
-inline static constexpr uint32_t group_x_64(uint32_t x) { return (x >> 6u) + ((x & 0x3fu) ? 1u : 0u); }
+inline static constexpr uint32_t group_xyz_4(uint32_t x) { return (x >> 6u) + ((x & 0x3fu) ? 1u : 0u); }
 
 std::shared_ptr<OctreeBuilder> OctreeBuilder::Create(const std::shared_ptr<Voxelizer> &voxelizer,
                                                      const std::shared_ptr<myvk::CommandPool> &command_pool) {
@@ -160,7 +160,7 @@ void OctreeBuilder::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &command
 		    {});
 	}
 
-	uint32_t fragment_group_x = group_x_64(m_voxelizer_ptr->GetVoxelFragmentCount());
+	uint32_t fragment_group_x = group_xyz_4(m_voxelizer_ptr->GetVoxelFragmentCount());
 
 	command_buffer->CmdBindDescriptorSets({m_descriptor_set}, m_pipeline_layout, VK_PIPELINE_BIND_POINT_COMPUTE, {});
 

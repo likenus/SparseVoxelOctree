@@ -93,6 +93,8 @@ add_executable(SparseVoxelOctree
 		src/OctreeBuilder3.cpp
 		src/OctreeBuilder3.hpp
         src/StackAllocator.hpp
+		src/OctreeBuilder4.cpp
+		src/OctreeBuilder4.hpp
 )
 
 find_package(Threads REQUIRED)

@@ -1,44 +1,37 @@
 //
-// Created by Linus on 09.12.2025.
+// Created by Linus on 19.01.2026.
 //
 
-#include "OctreeBuilder2.hpp"
+#include "OctreeBuilder4.hpp"
 
 #include "Config.hpp"
 
-#include <spdlog/spdlog.h>
-
-#include "Timer.hpp"
-
 #define COLOR_MASK 0x00ffffffu
 
-inline static constexpr uint32_t group_xyz_4(uint32_t x) { return (x >> 6u) + ((x & 0x3fu) ? 1u : 0u); }
+inline static constexpr uint32_t group_xyz_4(uint32_t x) { return (x >> 2u) + ((x & 0x3u) ? 1u : 0u); }
 
-std::shared_ptr<OctreeBuilder2> OctreeBuilder2::Create(const std::shared_ptr<VoxelGenerator> &generator,
-                                                     const std::shared_ptr<myvk::CommandPool> &command_pool,
-                                                     const std::shared_ptr<Timer> &timer) {
-	std::shared_ptr<OctreeBuilder2> ret = std::make_shared<OctreeBuilder2>();
+std::shared_ptr<OctreeBuilder4> OctreeBuilder4::Create(const std::shared_ptr<myvk::CommandPool> &command_pool,
+                                                     const std::shared_ptr<Timer> &timer,
+                                                     const uint32_t octree_level) {
+	std::shared_ptr<OctreeBuilder4> ret = std::make_shared<OctreeBuilder4>();
 
 	std::shared_ptr<myvk::Device> device = command_pool->GetDevicePtr();
-	ret->m_voxel_generator_ptr = generator;
 	ret->m_atomic_counter.Initialize(device);
 	ret->m_atomic_counter.Reset(command_pool, 0);
 	ret->m_device = device;
 	ret->m_command_buffer = myvk::CommandBuffer::Create(command_pool);
 	ret->m_fence = myvk::Fence::Create(device);
 	ret->m_timer = timer;
-
-	ret->generate_fragments();
+	ret->m_octree_level = octree_level;
 
 	ret->create_buffers(device);
 	ret->create_descriptors(device);
 	ret->create_pipeline(device);
 
-
 	return ret;
 }
 
-void OctreeBuilder2::create_buffers(const std::shared_ptr<myvk::Device> &device) {
+void OctreeBuilder4::create_buffers(const std::shared_ptr<myvk::Device> &device) {
 	m_build_info_buffer = myvk::Buffer::Create(device, 2 * sizeof(uint32_t), 0,
 	                                           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	m_build_info_staging_buffer = myvk::Buffer::CreateStaging<uint32_t>(device, 2, [](uint32_t *data) {
@@ -55,15 +48,14 @@ void OctreeBuilder2::create_buffers(const std::shared_ptr<myvk::Device> &device)
 		data[2] = 1; // uGroupZ
 	});
 
-	m_voxel_fragment_buffer = myvk::Buffer::Create(device, 2 * sizeof(uint32_t) * m_voxel_fragments.size(), 0,
-											VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	m_fragment_buffer = myvk::Buffer::Create(device, 1, 0, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
 	// Estimate octree buffer size
-	uint32_t octree_node_ratio = m_voxel_generator_ptr->GetLevel() / 4;
+	uint32_t octree_node_ratio = m_octree_level / 2;
 	uint32_t octree_entry_num =
-	    std::max(kOctreeNodeNumMin, m_voxel_generator_ptr->GetVoxelFragmentCount() * octree_node_ratio);
+	    std::max(kOctreeNodeNumMin, (1 << m_octree_level) * (1 << m_octree_level) * (1 << m_octree_level) * octree_node_ratio);
 	octree_entry_num = std::min(octree_entry_num, kOctreeNodeNumMax);
-
+	spdlog::info("Octree entry num = {}", octree_entry_num);
 	m_octree_buffer =
 		myvk::Buffer::Create(device, octree_entry_num * sizeof(uint32_t), 0,
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
@@ -71,7 +63,7 @@ void OctreeBuilder2::create_buffers(const std::shared_ptr<myvk::Device> &device)
 	             m_octree_buffer->GetSize() / 1000000.0);
 }
 
-void OctreeBuilder2::create_descriptors(const std::shared_ptr<myvk::Device> &device) {
+void OctreeBuilder4::create_descriptors(const std::shared_ptr<myvk::Device> &device) {
 	m_descriptor_pool = myvk::DescriptorPool::Create(device, 1, {{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5}});
 	{
 		VkDescriptorSetLayoutBinding atomic_counter_binding = {};
@@ -111,20 +103,20 @@ void OctreeBuilder2::create_descriptors(const std::shared_ptr<myvk::Device> &dev
 	m_descriptor_set = myvk::DescriptorSet::Create(m_descriptor_pool, m_descriptor_set_layout);
 	m_descriptor_set->UpdateStorageBuffer(m_atomic_counter.GetBuffer(), 0);
 	m_descriptor_set->UpdateStorageBuffer(m_octree_buffer, 1);
-	m_descriptor_set->UpdateStorageBuffer(m_voxel_fragment_buffer, 2);
+	m_descriptor_set->UpdateStorageBuffer(m_fragment_buffer, 2);
 	m_descriptor_set->UpdateStorageBuffer(m_build_info_buffer, 3);
 	m_descriptor_set->UpdateStorageBuffer(m_indirect_buffer, 4);
 }
 
-void OctreeBuilder2::create_pipeline(const std::shared_ptr<myvk::Device> &device) {
+void OctreeBuilder4::create_pipeline(const std::shared_ptr<myvk::Device> &device) {
 	m_pipeline_layout = myvk::PipelineLayout::Create(device, {m_descriptor_set_layout}, {});
 
 	{
-		uint32_t spec_data[] = {m_voxel_generator_ptr->GetVoxelResolution(), static_cast<uint32_t>(m_voxel_fragments.size())};
+		uint32_t spec_data[] = {1u << m_octree_level, 1u << m_octree_level};
 		VkSpecializationMapEntry spec_entries[] = {{0, 0, sizeof(uint32_t)}, {1, sizeof(uint32_t), sizeof(uint32_t)}};
 		VkSpecializationInfo spec_info = {2, spec_entries, 2 * sizeof(uint32_t), spec_data};
 		constexpr uint32_t kOctreeTagNodeCompSpv[] = {
-#include "spirv/octree_tag_node.comp.u32"
+#include "spirv/octree_tag_node3.comp.u32"
 		};
 		std::shared_ptr<myvk::ShaderModule> octree_tag_node_shader_module =
 		    myvk::ShaderModule::Create(device, kOctreeTagNodeCompSpv, sizeof(kOctreeTagNodeCompSpv));
@@ -160,7 +152,7 @@ void OctreeBuilder2::create_pipeline(const std::shared_ptr<myvk::Device> &device
 	}
 }
 
-void OctreeBuilder2::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &command_buffer) const {
+void OctreeBuilder4::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &command_buffer) const {
 	// transfers
 	{
 		command_buffer->CmdCopy(m_build_info_staging_buffer, m_build_info_buffer,
@@ -181,11 +173,11 @@ void OctreeBuilder2::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &comman
 		    {});
 	}
 
-	uint32_t fragment_group_x = group_xyz_4(m_voxel_fragments.size());
+	uint32_t fragment_group_x = group_xyz_4(1u << m_octree_level);
 
 	command_buffer->CmdBindDescriptorSets({m_descriptor_set}, m_pipeline_layout, VK_PIPELINE_BIND_POINT_COMPUTE, {});
 
-	for (uint32_t i = 1; i <= m_voxel_generator_ptr->GetLevel(); ++i) {
+	for (uint32_t i = 1; i <= m_octree_level; ++i) {
 		command_buffer->CmdBindPipeline(m_init_node_pipeline);
 		command_buffer->CmdDispatchIndirect(m_indirect_buffer);
 
@@ -196,9 +188,9 @@ void OctreeBuilder2::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &comman
 		    {});
 
 		command_buffer->CmdBindPipeline(m_tag_node_pipeline);
-		command_buffer->CmdDispatch(fragment_group_x, 1, 1);
+		command_buffer->CmdDispatch(fragment_group_x, fragment_group_x, fragment_group_x);
 
-		if (i != m_voxel_generator_ptr->GetLevel()) {
+		if (i != m_octree_level) {
 			command_buffer->CmdPipelineBarrier(
 			    VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {},
 			    {m_octree_buffer->GetMemoryBarrier(VK_ACCESS_SHADER_WRITE_BIT,
@@ -230,49 +222,28 @@ void OctreeBuilder2::CmdBuild(const std::shared_ptr<myvk::CommandBuffer> &comman
 	}
 }
 
-VkDeviceSize OctreeBuilder2::GetOctreeRange(const std::shared_ptr<myvk::CommandPool> &command_pool) const {
+VkDeviceSize OctreeBuilder4::GetOctreeRange(const std::shared_ptr<myvk::CommandPool> &command_pool) const {
 	return (m_atomic_counter.Read(command_pool) + 1u) * 8u * sizeof(uint32_t);
 }
-void OctreeBuilder2::CmdTransferOctreeOwnership(const std::shared_ptr<myvk::CommandBuffer> &command_buffer,
+void OctreeBuilder4::CmdTransferOctreeOwnership(const std::shared_ptr<myvk::CommandBuffer> &command_buffer,
                                                uint32_t src_queue_family, uint32_t dst_queue_family,
                                                VkPipelineStageFlags src_stage, VkPipelineStageFlags dst_stage) const {
 	command_buffer->CmdPipelineBarrier(
 	    src_stage, dst_stage, {}, {m_octree_buffer->GetMemoryBarrier(0, 0, src_queue_family, dst_queue_family)}, {});
 }
 
-void OctreeBuilder2::generate_fragments() {
-	m_timer->new_lap();
-	glm::uvec4 pos;
 
-	while (!m_voxel_generator_ptr->is_done) {
-		m_voxel_generator_ptr->DoStep(pos);
-		glm::uvec2 fragment;
-		fragment.x = pos.x | (pos.y << 12) | ((pos.z & 0xff) << 24);
-		fragment.y = ((pos.z >> 8) << 28) | COLOR_MASK & pos.w;
-		m_voxel_fragments.push_back(fragment);
-	}
-	m_timer->lap("generating fragments");
-}
+void OctreeBuilder4::Build() {
 
-void OctreeBuilder2::Build() {
 
-	auto voxel_fragment_staging_buffer = myvk::Buffer::CreateStaging(m_device, m_voxel_fragments.begin(), m_voxel_fragments.end());
 	m_command_buffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-	m_command_buffer->CmdCopy(voxel_fragment_staging_buffer, m_voxel_fragment_buffer, {{0, 0, voxel_fragment_staging_buffer->GetSize()}});
-	m_command_buffer->CmdPipelineBarrier(
-		VK_PIPELINE_STAGE_TRANSFER_BIT,
-		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, {},
-		{m_voxel_fragment_buffer->GetMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT)},
-		{});
 	CmdBuild(m_command_buffer);
-
 	m_command_buffer->End();
 	m_command_buffer->Submit(m_fence);
 	m_fence->Wait();
 }
 
-void OctreeBuilder2::DumpBuffer(const std::shared_ptr<myvk::CommandPool> &command_pool) {
+void OctreeBuilder4::DumpBuffer(const std::shared_ptr<myvk::CommandPool> &command_pool) {
 	uint32_t *buffer_content = static_cast<uint32_t *>(m_octree_buffer->GetMappedData());
 
 	uint32_t range = GetOctreeRange(command_pool) / sizeof(uint32_t);
@@ -281,7 +252,7 @@ void OctreeBuilder2::DumpBuffer(const std::shared_ptr<myvk::CommandPool> &comman
 		uint32_t cur = buffer_content[i];
 		std::cout << i << ": ";
 		if (cur & 0x40000000u) {
-			std::cout << "Leaf" << std::endl;
+			std::cout << ((cur & 0xffffff)) << std::endl;
 		} else if (cur & 0x80000000u) {
 			std::cout << ((cur & 0x3fffffff)) << std::endl;
 		}

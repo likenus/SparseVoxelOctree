@@ -127,7 +127,6 @@ void Application::resize() {
 	m_camera->m_aspect_ratio = extent.width / float(extent.height);
 	m_path_tracer_viewer->Resize(extent.width, extent.height);
 	m_octree_tracer->Resize(extent.width, extent.height);
-	// m_dynamic_octree_tracer->Resize(extent.width, extent.height);
 }
 
 void Application::draw_frame() {
@@ -366,34 +365,36 @@ Application::Application() {
 	m_octree = Octree::Create(m_device);
 
 	uint32_t octree_level = 12;
-	uint32_t depth = 10;
-	float delta = 22.5f;
+	uint32_t depth = 9;
 
-	auto ls = LSystem::Create("X");
+	// Bush
+	auto ls = LSystem::Create("X", 22.5f);
+	ls->addRule('X', "XF+F[<+X<-X<-X]-F[>-X>+X>+X]");
 	ls->addRule('F', "FF");
-	ls->addRule('X', "F[+X]F[-X]+X");
-
-
 
 	auto top_down_timer = Timer::start();
-	m_voxel_generator = VoxelGenerator::Create(top_down_timer, ls, octree_level, depth, delta);
-	m_octree_builder_2 = OctreeBuilder2::Create(m_voxel_generator, m_main_command_pool, top_down_timer);
+	m_voxel_generator = VoxelGenerator::Create(top_down_timer, ls, octree_level, depth);
+	m_top_down_octree_builder = OctreeBuilder2::Create(m_voxel_generator, m_main_command_pool, top_down_timer);
 
 	auto on_the_fly_timer = Timer::start();
-	m_voxel_generator2 = VoxelGenerator::Create(on_the_fly_timer, ls, octree_level, depth, delta);
-    m_octree_builder_3 = OctreeBuilder3::Create(m_voxel_generator2, m_main_command_pool, on_the_fly_timer);
+	m_voxel_generator2 = VoxelGenerator::Create(on_the_fly_timer, ls, octree_level, depth);
+    m_on_the_fly_octree_builder = OctreeBuilder3::Create(m_voxel_generator2, m_main_command_pool, on_the_fly_timer);
 
-	generate_on_the_fly(on_the_fly_timer); // 337
-	generate_top_down(top_down_timer); // 513
+	// auto noise_timer = Timer::start();
+	// m_noise_builder = OctreeBuilder4::Create(m_main_command_pool, noise_timer, octree_level);
+
+	generate_top_down(top_down_timer);
+	generate_on_the_fly(on_the_fly_timer);
+	//generate_noise_on_the_fly(noise_timer);
 
 	top_down_timer->log("Post process construction");
 	std::cout << "---------------" << std::endl;
 	on_the_fly_timer->log("On the fly construction");
+	std::cout << "---------------" << std::endl;
+	// noise_timer->log("Noise on the fly construction");
+	spdlog::info("octree range {} MB", m_on_the_fly_octree_builder->GetOctreeRange(m_main_command_pool) / 1000000);
 
-	//m_octree_builder_2->DumpBuffer(m_main_command_pool);
-	//m_octree_builder_3->DumpBuffer(m_main_command_pool);
-
-	m_octree->Update(m_main_command_pool, m_octree_builder_3);
+	m_octree->Update(m_main_command_pool, m_top_down_octree_builder);
 
 
 	m_octree_tracer = OctreeTracer::Create(m_octree, m_camera, m_lighting, m_render_pass, 0, kFrameCount);
@@ -531,13 +532,86 @@ void Application::glfw_framebuffer_resize_callback(GLFWwindow *window, int width
 void Application::generate_on_the_fly(const std::shared_ptr<Timer> &timer) {
 
 	timer->new_lap();
-    m_octree_builder_3->Build();
+    m_on_the_fly_octree_builder->Build();
 	timer->lap("Finish on the fly octree");
 }
 
 void Application::generate_top_down(const std::shared_ptr<Timer> &timer) {
 
 	timer->new_lap();
-	m_octree_builder_2->Build();
+	m_top_down_octree_builder->Build();
 	timer->lap("Finish top down octree");
 }
+
+void Application::generate_noise_on_the_fly(const std::shared_ptr<Timer> &timer) const {
+	timer->new_lap();
+	m_noise_builder->Build();
+	timer->lap("Finish on the fly noise tree");
+}
+
+void Application::Benchmark() const {
+
+	// Create lsystems
+	std::vector<std::shared_ptr<LSystem>> lsystems;
+	std::vector<std::string> names;
+	{
+		{
+			// Fern
+			auto ls = LSystem::Create("X", 22.5f);
+			ls->addRule('F', "FF");
+			ls->addRule('X', "F[>+X]F[<-X]+X");
+			lsystems.push_back(ls);
+			names.emplace_back("Fern");
+		}
+
+		{
+			// Bush
+			auto ls = LSystem::Create("X", 22.5f);
+			ls->addRule('X', "XF+F[<+X<-X<-X]-F[>-X>+X>+X]");
+			ls->addRule('F', "FF");
+			lsystems.push_back(ls);
+			names.emplace_back("Bush");
+		}
+
+		{
+			// Serpinski carpet
+			auto ls = LSystem::Create("F", 90.f);
+			ls->addRule('F', "FFF[+FFF+FFF+FFF]");
+			lsystems.push_back(ls);
+			names.emplace_back("Serpinski carpet");
+		}
+
+		{
+			// Standard plant
+			auto ls = LSystem::Create("F", 22.5f);
+			ls->addRule('F', "F[+F]F[-F]F");
+			lsystems.push_back(ls);
+			names.emplace_back("Standard plant");
+		}
+	}
+
+	uint32_t depth = 5, octree_level = 9;
+	for (int i = 0; i < lsystems.size(); i++) {
+		const auto& ls = lsystems[i];
+		spdlog::info("Begin benchmarking: {}", names[i]);
+		for (uint32_t level = 8; level < octree_level; level++) {
+			auto top_down_timer = Timer::start();
+			auto voxel_generator = VoxelGenerator::Create(top_down_timer, ls, octree_level, depth);
+			auto top_down_octree_builder = OctreeBuilder2::Create(voxel_generator, m_main_command_pool, top_down_timer);
+			top_down_timer->new_lap();
+			top_down_octree_builder->Build();
+			top_down_timer->lap("Finish top down octree");
+			top_down_timer->log("Top down construction");
+
+			auto on_the_fly_timer = Timer::start();
+			auto voxel_generator2 = VoxelGenerator::Create(on_the_fly_timer, ls, octree_level, depth);
+			auto on_the_fly_octree_builder = OctreeBuilder3::Create(voxel_generator2, m_main_command_pool, on_the_fly_timer);
+			on_the_fly_timer->new_lap();
+			on_the_fly_octree_builder->Build();
+			on_the_fly_timer->lap("Finish on the fly octree");
+			top_down_timer->log("On the fly construction");
+		}
+	}
+}
+
+

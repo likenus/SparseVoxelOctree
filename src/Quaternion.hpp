@@ -26,25 +26,28 @@ public:
         return a;
     }
 
-    Quaternion conjugate() {
-        return Quaternion(x, -y, -z, -w);
+    [[nodiscard]] Quaternion conjugate() const {
+        return {x, -y, -z, -w};
     }
 
-    static glm::vec3 rotate(glm::vec3 v, float phi, glm::vec3 axis) {
-        Quaternion r = Quaternion(glm::cos(phi /2.f), axis * glm::sin(phi / 2.f));
+    static glm::vec3 rotate(const glm::vec3 &v, const float phi, const glm::vec3 &axis) {
+        Quaternion r = Quaternion(glm::cos(phi / 2.f), axis * glm::sin(phi / 2.f));
         Quaternion w = Quaternion(0.f, v);
 
         auto res = r * w * r.conjugate();
-        return glm::vec3(res.y, res.z, res.w);
+        return {res.y, res.z, res.w};
     }
 
-    static glm::vec3 rotate(glm::vec3 v, Quaternion r) {
-        Quaternion w = Quaternion(0.f, v);
+    static glm::vec3 rotate(const glm::vec3 &v, const Quaternion &r) {
+        auto w = Quaternion(0.f, v);
 
         auto res = r * w * r.conjugate();
-        return glm::vec3(res.x, res.y, res.z);
+        return {res.y, res.z, res.w};
     }
 };
+
+
+
 
 
 #endif //SPARSEVOXELOCTREE_QUATERNION_HPP

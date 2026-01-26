@@ -34,6 +34,7 @@ int main(int argc, char **argv) {
 	}
 
 	Application app{};
+	//app.Benchmark();
 	if (filename)
 		app.Load(*filename, octree_level);
 	app.Run();
